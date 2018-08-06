@@ -27,7 +27,6 @@ test('resolves maintain', async (t) => {
   await currency.ready()
   const aggregated = currency.aggregated()
   t.true(_.isObject(aggregated))
-  console.log(JSON.stringify(aggregated, null, 2))
 })
 
 test('has an altrate fn to access and set altrates', (t) => {
