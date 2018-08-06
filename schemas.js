@@ -47,19 +47,3 @@ module.exports = {
   coinmarketcap,
   binance
 }
-
-// Currency.prototype.schemas = {
-//   rates: Joi.object().keys({
-//     altrates: Joi.object().keys({}).pattern(/^[0-9A-Z]{2,}$/,
-//                                             Joi.object().keys({}).pattern(/^[0-9A-Z]{2,}$/,
-//                                                                           Joi.number().positive())).optional(),
-
-//     fxrates: Joi.object().keys({
-//       rates: Joi.object().keys({}).pattern(/^[0-9A-Z]{2,}$/, Joi.number().positive()).required()
-//     }).unknown(true).optional(),
-
-//     rates: Joi.object().keys({}).pattern(/^[0-9A-Z]{2,}$/,
-//                                          Joi.object().keys({}).pattern(/^[0-9A-Z]{2,}$/,
-//                                                                        Joi.number().positive())).optional()
-//   }).required()
-// }

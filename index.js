@@ -1,320 +1,218 @@
 const _ = require('underscore')
-const BigNumber = require('bignumber.js')
 const Joi = require('joi')
-const NodeCache = require('node-cache')
 const Promise = require('bluebird')
-const SDebug = require('sdebug')
-const WebSocket = require('faye-websocket')
-const binance = require('node-binance-api')
-const currencyCodes = require('currency-codes')
-const debug = new SDebug('currency')
-const oxr = require('oxr')
 const wreck = require('wreck')
+const debug = require('./debug')
+const DefaultCache = require('./cache')
+const cacheKeys = DefaultCache.keys
 const schemas = require('./schemas')
 const time = require('./time')
 const regexp = require('./regexp')
-const decimals = require('./decimals')
+const globalAltcoinConfig = require('./altcoins')
+const ScopedBigNumber = require('./big-number')
+const monitors = require('./monitors')
+const promises = require('./promises')
+const createGlobal = require('./create-global')
+const number = require('./number')
+const {
+  jsonClone,
+  captureException,
+  inverse
+} = require('./utils')
+const deepSetGet = require('./get-set')
+const defaultConfig = require('./default-config')
+
+const MAINTENANCE = 'maintenance'
+const READY = 'ready'
 
 module.exports = Currency
 
-const ScopedBigNumber = BigNumber.clone()
-ScopedBigNumber.config({
-  EXPONENTIAL_AT: 28,
-  DECIMAL_PLACES: 18
-})
+Currency.inverse = inverse
+Currency.config = jsonClone(defaultConfig)
 
-let globalInstance
+const globl = createGlobal(Currency, Currency.config)
 
-const defaultConfig = {
-  globalFiats: ['USD', 'EUR'],
-  altcoins: ['BAT', 'ETH'],
-  gdaxSocketURL: 'wss://ws-feed.gdax.com/',
-  rates: {
-    url: 'http://localhost:3004/v1/rates',
-    access_token: '00000000-0000-4000-0000-000000000000'
-  }
+const scopedObjectSet = {
+  altrates: {},
+  fxrates: {},
+  tickers: {},
+  rates: {}
 }
-
-Currency.config = defaultConfig
 
 Currency.prototype = {
   constructor: Currency,
   altrates: {},
   fxrates: {},
+  tickers: {},
   rates: {},
-  init,
+  monitors,
+  time: _.clone(time),
+  altrate: accessDeep('altrates'),
+  fxrate: accessDeep('fxrates'),
+  ticker: accessDeep('tickers'),
+  rate: accessDeep('rates'),
+  wreck,
+  aggregated,
   alt2scale,
-  fiatP,
   captureException,
-  currencyToNumber,
+  captureValidation,
   alt2fiat,
   fiat2alt,
   dial911,
-  getFiatRate,
   retrieve,
-  monitor1,
-  monitor2,
-  monitor3,
   allcoinsHas,
   splitSymbol,
   srcSymbol,
   destSymbol,
-  global,
-  inkblot
+  global: globl,
+  inkblot,
+  wraptry,
+  normalize,
+  rorschach,
+  tickerConvertURL,
+  init: promises.break(READY, READY),
+  ready: promises.make(READY, ready),
+  maintain: promises.break(MAINTENANCE, MAINTENANCE),
+  maintenance: promises.make(MAINTENANCE, maintenance),
+  getRates,
+  allcoinsHasAny,
+  printRates,
+  altcoinsFind,
+  setAcrossRates
 }
 
-const globalAltcoinConfig = {
-  _internal: {
-    f: async (altcoin, tickers, context) => {
-      const {
-        cache,
-        config
-      } = context
-      const fiats = cache.get('fiats:' + altcoin)
-
-      if (!fiats) {
-        return
-      }
-
-      const fiatGetter = context.getFiatRate(altcoin)
-
-      const {
-        rates,
-        unavailable
-      } = fiats.reduce(fiatGetter, {
-        rates: {},
-        unavailable: []
-      })
-      if (unavailable.length > 0) {
-        return context.captureException(altcoin + '.f fiat error: ' + unavailable.join(', ') + ' unavailable')
-      }
-
-      const target = {}
-      target[altcoin] = rates
-      try {
-        await context.rorschach(target, tickers)
-      } catch (ex) {
-        let now = _.now()
-        if (context.warnings > now) {
-          return
-        }
-
-        context.warnings = now + (15 * time.minute)
-        context.captureException(ex)
-        return
-      }
-    }
-  },
-
-  BAT: {
-    id: 'basic-attention-token'
-  },
-
-  BTC: {
-    id: 'bitcoin',
-
-    f: async (tickers, context) => {
-      return globalAltcoinConfig._internal.f('BTC', tickers, context)
-    }
-  },
-
-  ETH: {
-    id: 'ethereum',
-
-    f: async (tickers, context) => {
-      return globalAltcoinConfig._internal.f('ETH', tickers, context)
-    }
-  },
-
-  LTC: {
-    id: 'litecoin',
-
-    f: async (tickers, context) => {
-      return globalAltcoinConfig._internal.f('LTC', tickers, context)
-    }
-  }
-}
-
-function global() {
-  if (!globalInstance) {
-    globalInstance = new Currency(this.config)
-  }
-  return globalInstance
-}
-
-function Currency(config_ = {}, runtime) {
+function Currency (config_ = {}, runtime) {
   const context = this
   if (!(context instanceof Currency)) {
     return new Currency(config_, runtime)
   }
 
   if (config_.static) {
-    context.init()
     return context
   }
 
-  const stdTTL = 1 * time.minute
-  const cache = new NodeCache({
-    stdTTL
-  })
-
-  const config = _.assign({}, defaultConfig, config_)
+  const configClone = jsonClone(Currency.config)
+  const config = _.assign(configClone, config_)
 
   let {
     altcoins,
     altcurrency,
-    static,
-    globalFiats
+    globalFiats,
+    instance,
+    Cache = DefaultCache
   } = config
 
   context.config = config
+
+  const monitors = this.monitors.concat(config.monitors || [])
+
+  _.assign(context, {
+    monitors,
+    promises: {}
+  }, instance === true ? scopedObjectSet : instance)
 
   context.BigNumber = config.BigNumber || ScopedBigNumber
 
   context.informs = 0
   context.warnings = 0
-  context.cache = cache
+  context.cache = new Cache()
 
   const fiatsCache = {}
   context.fiats = fiatsCache
-  context.tickers = {}
 
+  // munge
   if (altcurrency && altcoins.indexOf(altcurrency) === -1) {
-    // munge
     altcoins = altcoins.concat(altcurrency)
   }
   config.altcoins = altcoins
 
-  allcoins = _.clone(altcoins)
+  const allcoins = altcoins.slice(0)
   config.allcoins = allcoins
+
   globalFiats.forEach((fiat) => {
     if (!context.allcoinsHas(fiat)) {
       allcoins.push(fiat)
     }
     fiatsCache[fiat] = true
   })
+
+  context.ready()
 }
 
-function captureException() {
-  console.log(...arguments)
+function tickerConvertURL (currency) {
+  return `${this.config.urls.coinmarketcap}/?convert=${currency}`
 }
 
-function init() {
+async function wraptry (trier, catcher, finallier) {
+  let result, err
+  try {
+    result = trier && await trier()
+  } catch (e) {
+    err = e
+    this.captureException(err)
+    result = catcher ? await catcher(err) : result
+  } finally {
+    result = finallier ? await finallier(err, result) : result
+  }
+  return result
+}
+
+function captureValidation (key, object, schema, message = (msg) => msg) {
+  const context = this
+  const { error } = Joi.validate(object, schema)
+
+  if (error) {
+    return context.captureException(message(error), {
+      extra: {
+        [key]: object
+      }
+    })
+  }
+}
+
+// async function teardown () {
+//   //
+// }
+
+async function ready () {
   const context = this
   const {
     config
   } = context
+  const {
+    altcoins
+  } = config
 
-  config.altcoins.forEach((altcoin) => {
-    const f = globalAltcoinConfig[altcoin]
-
-    if (f && f.p) {
-      f.p(context)
-    }
-  })
+  await Promise.all(altcoins.map((altcoin) => {
+    return globalAltcoinConfig.call(altcoin, 'p', [context])
+  }))
 
   setInterval(() => {
-    context.maintenance()
+    context.maintain()
   }, 1 * time.minute)
 
-  if (config.helper) {
-    context.maintenance()
-    return
-  }
-
-  context.monitor1()
-  context.monitor2()
-  context.monitor3()
+  await Promise.all(_.map(context.monitors, (monitor) => {
+    return monitor(context)
+  }).concat([context.maintain()]))
 }
 
-function addBaselineSymbols(symbols, altcoin) {
-  if (altcoin === 'BTC') {
-    symbols.push('BTCUSDT')
-  } else if (altcoin === 'ETH') {
-    symbols.push('ETHUSDT', 'ETHBTC')
-  } else {
-    symbols.push(altcoin.split('-').join('') + 'BTC')
-  }
-  return symbols
-}
-
-function monitor1() {
-  const context = this
-  const { config } = context
-  const symbols = config.altcoins.reduce(addBaselineSymbols, [])
-
-  debug('monitor1', {
-    symbols
-  })
-
-  symbols.forEach((symbol) => {
-    monitor1a(symbol, false, context)
-  })
-}
-
-function monitor1a(symbol, retryP, singleton) {
-  const context = this
-  const { config } = singleton
-  if (retryP) {
-    debug('monitor1', {
-      symbol,
-      retryP
-    })
-  }
-
-  const event = symbol.toLowerCase() + '@aggTrade'
-  binance.websockets.subscribe(event, (trade) => {
-    const { error } = Joi.validate(trade, schemas.binance)
-
-    if (error) {
-      return context.captureException(error, {
-        extra: {
-          trade
-        }
-      })
-    }
-
-    const {
-      p: price,
-      e: event,
-      s: symbol
-    } = trade
-    const [
-      src,
-      dest
-    ] = singleton.splitSymbol(symbol)
-
-    singleton.flatline = false
-    if (event !== 'aggTrade' || src === dest || !singleton.allcoinsHasAny([src, dest])) {
-      return
-    }
-
-    singleton.altrate(src, dest, price)
-
-  }, () => {
-    setTimeout(function() {
-      monitor1a(symbol, true, singleton)
-    }, 15 * time.second)
-  })
-}
-
-function allcoinsHasAny(symbols) {
+function allcoinsHasAny (symbols) {
   return _.find(symbols, (symbol) => this.allcoinsHas(symbol)) !== undefined
 }
 
-function splitSymbol(symbol) {
+function splitSymbol (symbol) {
   const context = this
   return [
-    context.src(symbol),
-    context.dist(symbol)
+    context.srcSymbol(symbol),
+    context.destSymbol(symbol)
   ]
 }
 
-function srcSymbol(symbol) {
+function srcSymbol (symbol) {
   return symbol.substr(0, 3)
 }
 
-function destSymbol(symbol) {
+function destSymbol (symbol) {
   let symb = symbol.substr(3)
   if (symb === 'USDT') {
     symb = 'USD'
@@ -322,364 +220,203 @@ function destSymbol(symbol) {
   return symb
 }
 
-function allcoinsHas(str) {
+function allcoinsHas (str) {
   return this.config.allcoins.indexOf(str) !== -1
 }
 
-function getFiatRate(altcoin) {
-  const { cache } = this
-  return (memo, fiat) => {
-    const { rates, unavailable } = memo
-    const rate = cache.get('ticker:' + altcoin + fiat)
-    rates[fiat] = (rate && rate.last) || (unavailable.push(fiat) && undefined)
-    return memo
-  }
-}
-
-function monitor2() {
-  const singleton = this
-  let {
-    config,
-    cache,
-    gdax
-  } = singleton
-
-  if (gdax) {
-    return
-  }
-
-  const query = []
-  const symbols = []
-  const {
-    altcoins,
-    gdaxSocketURL
-  } = config
-
-  altcoins.forEach((altcoin) => {
-    const eligible = []
-
-    if ((!altcoins[altcoin]) || (altcoin === 'BAT')) {
-      return
-    }
-
-    fiats.forEach((fiat) => {
-      const product_id = altcoin + '-' + fiat
-      query.push({
-        type: 'subscribe',
-        product_id
-      })
-      symbols.push(product_id)
-      eligible.push(fiat)
-    })
-
-    cache.set('fiats:' + altcoin, eligible)
-  })
-
-  debug('monitor2', {
-    symbols: symbols
-  })
-
-  gdax = new WebSocket.Client(gdaxSocketURL)
-  singleton.gdax = gdax
-
-  gdax.on('open', (event) => {
-    debug('monitor2', {
-      event: 'connected',
-      connected: true
-    })
-  })
-  gdax.on('close', (event) => {
-    if (event.code !== 1000) {
-      let eventValues = _.pick(event, [
-        'code',
-        'reason'
-      ])
-      let extendedEventValues = _.extend({
-        event: 'disconnected'
-      }, eventValues)
-      debug('monitor2', extendedEventValues)
-    }
-    retry()
-  })
-  gdax.on('error', (event) => {
-    debug('monitor2', {
-      event: 'error',
-      message: event.message
-    })
-    retry()
-  })
-  gdax.on('message', (event) => {
-    let { data } = event
-    if (_.isUndefined(data)) {
-      retry()
-      return this.captureException(new Error('no event.data'))
-    }
-
-    try {
-      data = JSON.parse(data)
-    } catch (ex) {
-      retry()
-      return this.captureException(ex)
-    }
-
-    let {
-      type,
-      price,
-      product_id: productID
-    } = data
-
-    if (_.isUndefined(type) || _.isUndefined(price)) {
-      return
-    }
-
-    const { error } = Joi.validate(data, schemas.gdax)
-    if (error) {
-      retry()
-      return this.captureException(error, {
-        extra: {
-          data
-        }
-      })
-    }
-
-    const squishedID = product_id.replace('-', '')
-    const priceInt = parseFloat(price)
-    cache.set('ticker:' + squishedID, priceInt)
-  })
-  try {
-    query.forEach((symbol) => {
-      gdax.send(JSON.stringify(symbol))
-    })
-  } catch (ex) {
-    retry()
-    return this.captureException(ex)
-  }
-
-  function retry() {
-    try {
-      if (gdax) {
-        gdax.end()
-      }
-    } catch (ex) {
-      debug('monitor2', {
-        event: 'end',
-        message: ex.toString()
-      })
-    }
-
-    gdax = undefined
-    setTimeout(() => {
-      singleton.monitor2(config)
-    }, 15 * time.second)
-  }
-}
-
-function monitor3() {
-  let cacheTTL
-  const singleton = this
-  const { config } = singleton
-  const { xor } = config
-
-  if (!oxr) {
-    return
-  }
-
-  cacheTTL = parseInt(oxr.cacheTTL, 10)
-
-  if (isNaN(cacheTTL) || (cacheTTL < 1)) {
-    cacheTTL = 7 * 24 * 1000 * 3600
-  }
-
-  const factory = oxr.factory({
-    appId: oxr.apiID
-  })
-  const store = {
-    get: function() {
-      return Promise.resolve(this.value)
-    },
-    put: function(value) {
-      this.value = value
-      return Promise.resolve(value)
-    }
-  }
-  const ttl = parseInt(cacheTTL, 10)
-  const options = {
-    store,
-    ttl
-  }
-
-  singleton.oxr = oxr.cache(options, factory)
-}
-
-async function maintenance() {
-  const now = _.now()
+function getRates () {
   const context = this
-  let fxrates, rates, results, tickers
-  let {
-    flatline,
+  const { rates } = context.config
+  const {
+    url,
+    access_token: accessToken
+  } = rates
+  const headers = {
+    authorization: `Bearer ${accessToken}`,
+    'content-type': 'application/json'
+  }
+  const options = {
+    headers,
+    useProxyP: true
+  }
+
+  return context.retrieve(url, options, schemas.currency)
+}
+
+async function retrieveRatesEndpoint (context) {
+  const {
     config,
     rates: ratesPointer
   } = context
   const {
-    rates
+    altcoins
   } = config
+  const ratesClone = jsonClone(ratesPointer)
+  const getter = () => context.getRates()
 
-  if (helper) {
-    ratesClone = JSON.parse(JSON.stringify(ratesPointer))
+  const results = await context.wraptry(getter)
 
-    try {
-      results = await this.retrieve(rates.url, {
-        headers: {
-          authorization: 'Bearer ' + rates.access_token,
-          'content-type': 'application/json'
-        },
-        useProxyP: true
-      }, schemas.currency)
-    } catch (ex) {
-      context.captureException(ex)
+  _.keys(results).forEach((key) => {
+    const target = context[key]
+    if (!_.isObject(target)) {
+      return
     }
 
-    _.keys(results).forEach((key) => {
-      if (_.isObject(context[key])) {
-        return
-      }
+    _.extend(target, results[key])
+  })
 
-      _.extend(context[key], results[key])
-    })
-    config.altcoins.forEach((currency) => {
-      if (_.isEqual(ratesClone[currency], ratesPointer[currency])) {
-        return
-      }
-      const fiatCurrencies = _.pick(ratesPointer[currency], fiats)
-      const stringFiatCurrencies = JSON.stringify(fiatCurrencies)
-      debug(currency + ' fiat rates', stringFiatCurrencies)
-    })
+  altcoins.forEach((currency) => {
+    if (!_.isEqual(ratesClone[currency], ratesPointer[currency])) {
+      return
+    }
+    context.printRates(currency)
+  })
+}
 
-    return
+async function maintenance () {
+  const now = _.now()
+  const context = this
+  let tickers
+  let {
+    flatline,
+    config
+  } = context
+
+  if (config.helper) {
+    return retrieveRatesEndpoint(context)
   }
 
   if (flatline) {
     debug('maintenance', {
       message: 'no trades reported'
     })
-    this.captureException(new Error('maintenance reports flatline'))
-    if (process.env.NODE_ENV !== 'production') process.exit(0)
+    context.captureException(new Error('maintenance reports flatline'))
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(0)
+    }
 
-    await this.dial911(config)
+    await context.dial911()
   }
   context.flatline = true
-
-  const { xor } = context
+  const { oxr } = context
 
   if (oxr) {
-    try {
-      fxrates = await oxr.latest()
-    } catch (ex) {
-      this.captureException(ex)
-    }
-    if ((fxrates) && (fxrates.rates)) {
-      context.fxrates = fxrates
+    let fxrates = await context.wraptry(() => oxr.latest())
+    if (fxrates && fxrates.rates) {
+      _.assign(context.fxrates, fxrates)
     }
   }
 
   try {
-    tickers = await this.inkblot()
+    tickers = await context.inkblot()
   } catch (ex) {
     if (context.warnings <= now) {
       context.warnings = now + (15 * time.minute)
-      this.captureException(ex)
+      context.captureException(ex)
     }
   }
 
   try {
-    await this.rorschach(context.altrates, tickers)
+    await context.rorschach(context.altrates, tickers)
   } catch (ex) {
     if (context.warnings <= now) {
       context.warnings = now + (15 * time.minute)
-      this.captureException(ex)
+      context.captureException(ex)
     }
   }
 
-  for (let altcoin of config.altcoins) {
-    const f = globalAltcoinConfig[altcoin]
+  const altkeys = _.keys(config.altcoins)
+  await context.altcoinsFind(altkeys, tickers)
+}
 
-    if (f && f.f) {
-      await f.f(tickers, context)
-    }
+function aggregated () {
+  const {
+    rates,
+    fxrates,
+    altrates,
+    tickers
+  } = this
+  return {
+    rates,
+    fxrates,
+    altrates,
+    tickers
   }
 }
 
-function currencyToNumber(rates) {
-  return _.mapObject(rates, (sub) => {
-    return _.mapObject(sub, (value) => {
-      return +value
-    })
-  })
+function altcoinsFind (keys, tickers) {
+  const context = this
+  return Promise.all(keys.map((altcoin) => {
+    const args = [tickers, context]
+    return globalAltcoinConfig.call(altcoin, 'f', args)
+  }))
 }
 
-async function retrieve(url, props, schema) {
+async function retrieve (url, props, schema) {
   let result
-  const singleton = this
+  const context = this
+  const {
+    cache,
+    wreck
+  } = context
+  const urlKey = cacheKeys.url(url)
 
-  result = singleton.cache.get('url:' + url)
+  result = cache.get(urlKey)
   if (result) {
     return result
   }
 
-  result = await singleton.wreck.get(url, props || {})
-  if (Buffer.isBuffer(result)) {
-    result = result.toString()
-  }
+  let { payload } = await wreck.get(url, props || {})
+  result = payload.toString()
+
   // courtesy of https://stackoverflow.com/questions/822452/strip-html-from-text-javascript#822464
   if (result.indexOf('<html>') !== -1) {
-    throw new Error(result.replace(/<(?:.|\n)*?>/gm, ''))
+    result = result.replace(regexp.html, '')
+    throw new Error(result)
   }
 
   result = JSON.parse(result)
-  const { error } = schema ? Joi.validate(result, schema) : {}
+  const error = schema ? context.captureValidation('data', result, schema) : null
   if (error) {
-    this.captureException(error, {
-      extra: {
-        data: result
-      }
-    })
     throw new Error(error)
   }
 
-  singleton.cache.set('url:' + url, result)
+  cache.set(urlKey, result)
   return result
 }
 
-// const schemaCMC =
-//       Joi.object().keys({
-//         symbol: Joi.string().regex(/^[A-Z]{3}$/).required(),
-//         price_btc: Joi.number().positive().required(),
-//         price_usd: Joi.number().positive().required()
-//       }).unknown(true).required()
-
-async function dial911(config) {
+async function dial911 () {
   const fiat = 'USD'
-  let entries
-  const singleton = this
+  // let entries
+  const context = this
+  const url = this.tickerConvertURL(fiat)
+  const getter = () => this.retrieve(url)
 
-  try {
-    entries = await this.retrieve('https://api.coinmarketcap.com/v1/ticker/?convert=' + fiat)
-  } catch (ex) {
-    return this.captureException('dial911 ticker error: ' + fiat + ': ' + ex.message)
+  const entries = await this.wraptry(getter, (ex) => {
+    const message = `dial911 ticker error: ${fiat}: ${ex.message}`
+    this.captureException(message)
+  })
+
+  if (!entries) {
+    return
   }
+
   entries.forEach((entry) => {
     const {
-      src: symbol,
+      symbol: src,
       id
     } = entry
-    const { error } = Joi.validate(entry, schemas.coinmarketcap)
-    const { altcoins } = singleton
-    const altcoin = altcoins[src]
-    if (error || !singleton.allcoinsHas(src) || !altcoin || altcoin.id !== id) {
+
+    if (context.captureValidation('data', entry, schemas.coinmarketcap)) {
       return
     }
 
-    console.log('processing ' + JSON.stringify(entry, null, 2))
+    if (!context.allcoinsHas(src) || !globalAltcoinConfig.has(src, id)) {
+      return
+    }
+
+    const stringified = JSON.stringify(entry, null, 2)
+    console.log(`processing ${stringified}`)
     _.keys(entry).forEach((key) => {
       const dst = key.substr(6).toUpperCase()
 
@@ -687,84 +424,80 @@ async function dial911(config) {
         return
       }
 
-      singleton.altrate(src, dst, entry[key])
+      context.altrate(src, dst, entry[key])
     })
   })
 }
 
-function deepRatio(deepObject, a, b, value) {
-  let base = deepObject[a]
-  if (!base) {
-    base = {}
-    deepObject[a] = base
+function accessDeep (key) {
+  return function () {
+    return deepSetGet(this[key], ...arguments)
   }
-  if (_.isUndefined(value)) {
-    return base[b]
-  }
-  base[b] = value
 }
 
-function altrate(src, dst, value) {
-  return deepRatioSetGet(this.altrates, src, dst, value)
-}
-
-function deepRatioSetGet(object, src, dst, value) {
-  if (_.isUndefined(value)) {
-    return deepRatio(object, src, dst)
-  }
-  deepRatio(object, src, dst, value)
-  deepRatio(object, dst, src, 1 / value)
-}
-
-async function inkblot() {
+async function inkblot () {
   const context = this
-  const { config } = context
+  const {
+    config
+  } = context
+  const {
+    globalFiats
+  } = config
   const unavailable = []
   let tickers = {}
 
-  for (let i = fiats.length - 1; i >= 0; i--) {
-    let fiat = fiats[i]
+  for (let i = globalFiats.length - 1; i >= 0; i--) {
+    let fiat = globalFiats[i]
 
-    if ((fiat !== 'USD' || fiats.length === 1) && (!tickers[fiat])) {
+    if ((fiat !== 'USD' || globalFiats.length === 1) && (!tickers[fiat])) {
       await ticker(fiat)
     }
   }
-  fiats.forEach((fiat) => {
+
+  globalFiats.forEach((fiat) => {
     if (!tickers[fiat]) {
       unavailable.push(fiat)
     }
   })
   if (unavailable.length > 0) {
-    throw new Error('fiats ' + unavailable.join(', ') + ' unavailable')
+    const unavailableString = unavailable.join(', ')
+    const message = `fiats ${unavailableString} unavailable`
+    throw new Error(message)
   }
 
-  return context.normalize(tickers, config, runtime)
+  return context.normalize(tickers)
 
-  async function ticker(fiat) {
-    let entries
+  async function ticker (fiat) {
+    const url = context.tickerConvertURL(fiat)
+    const retriever = () => context.retrieve(url)
 
-    try {
-      entries = await retrieve('https://api.coinmarketcap.com/v1/ticker/?convert=' + fiat)
-    } catch (ex) {
-      ex.message = fiat + ': ' + ex.message
+    const entries = await context.wraptry(retriever, (ex) => {
+      ex.message = `${fiat}: ${ex.message}`
       throw ex
-    }
+    })
+
     entries.forEach((entry) => {
-      const src = entry.symbol
-      const { error } = Joi.validate(entry, schemas.coinmarketcap)
+      const {
+        symbol: src
+      } = entry
 
-      if (config.allcoins.indexOf(src) === -1) return
-
-      if (!globalAltcoinConfig[src]) {
-        return context.captureException('monitor ticker error: no entry for altcoins[' + src + ']')
-      }
-
-      if (globalAltcoinConfig[src].id !== entry.id) {
+      if (config.allcoins.indexOf(src) === -1) {
         return
       }
 
+      if (!globalAltcoinConfig.has(src)) {
+        const message = `monitor ticker error: no entry for altcoins[${src}]`
+        return context.captureException(message)
+      }
+
+      if (!globalAltcoinConfig.has(src, entry.id)) {
+        return
+      }
+
+      const { error } = Joi.validate(entry, schemas.coinmarketcap)
       if (error) {
-        return context.captureException('monitor ticker error: ' + error, {
+        const message = `monitor ticker error: ${error}`
+        return context.captureException(message, {
           extra: {
             data: entry
           }
@@ -778,44 +511,31 @@ async function inkblot() {
           return
         }
 
-        if (!tickers[src]) tickers[src] = {}
-        tickers[src][dst] = entry[key]
-
-        if (!tickers[dst]) tickers[dst] = {}
-        tickers[dst][src] = 1.0 / entry[key]
+        deepSetGet(tickers, src, dst, entry[key])
       })
     })
   }
-
 }
 
-async function rorschach(rates, tickers) {
-  let informP, now
+async function rorschach (rates_, tickers) {
+  let informed, now
   const context = this
-  const { config } = context
+  const {
+    config,
+    informs
+  } = context
+  const {
+    globalFiats,
+    altcoins
+  } = config
+  const rates = context.normalize(rates_, config)
 
-  const compare = (currency, fiat, rate1, rate2) => {
-    const ratio = rate1 / rate2
-
-    if ((ratio >= 0.9) && (ratio <= 1.1)) {
-      return
-    }
-
-    debug('rorschach', {
-      altcoin: currency,
-      fiat: fiat,
-      rate1: rate1,
-      rate2: rate2
-    })
-    throw new Error(currency + ' error: ' + fiat + ' ' + rate1 + ' vs. ' + rate2)
-  }
-
-  rates = context.normalize(rates, config)
-
-  fiats.forEach((fiat) => {
-    config.altcoins.forEach((altcoin) => {
-      if (rates[altcoin][fiat]) {
-        compare(altcoin, fiat, rates[altcoin][fiat], tickers[altcoin][fiat])
+  globalFiats.forEach((fiat) => {
+    altcoins.forEach((altcoin) => {
+      const rate1 = deepSetGet(rates, altcoin, fiat)
+      if (rate1) {
+        const rate2 = deepSetGet(tickers, altcoin, fiat)
+        compare(altcoin, fiat, rate1, rate2)
       }
     })
   })
@@ -823,31 +543,78 @@ async function rorschach(rates, tickers) {
   context.tickers = tickers
 
   now = _.now()
-  informP = context.informs <= now
-  config.altcoins.forEach((currency) => {
-    const rate = context.rates[currency] || {}
+  informed = informs <= now
 
-    context.rates[currency] = _.extend(_.clone(rate), rates[currency] || {})
-    if ((informP) && (!_.isEqual(context.rates[currency], rate))) {
-      debug(currency + ' fiat rates', JSON.stringify(_.pick(context.rates[currency], fiats)))
+  altcoins.forEach((currency) => {
+    const rate = context.rate(currency)
+    const rateClone = jsonClone(rate)
+
+    rates[currency] = _.assign(rateClone, rates[currency] || {})
+    const isDifferent = !_.isEqual(rateClone, rate)
+
+    if (informed && isDifferent) {
+      context.printRates(currency)
     }
   })
-  if (informP) context.informs = now + (1 * time.minute)
+  if (informed) {
+    context.informs = now + (1 * time.minute)
+  }
 
-  context.rates = context.normalize(context.rates, config)
-  Currency.prototype.rates = context.rates
+  context.normalize(context.rates)
 }
 
-function normalize(rates, config, runtime) {
-  const singleton = this
-  const tickers = singleton.tickers
+function printRates (currency) {
+  const context = this
+  const {
+    rates,
+    fiats
+  } = context
+  const subRates = _.pick(rates[currency], fiats)
+  const stringifiedRates = JSON.stringify(subRates)
+  debug(`${currency} fiat rates ${stringifiedRates}`)
+}
 
-  config.allcoins.forEach((currency) => {
-    if (!rates[currency]) rates[currency] = {}
+function compare (altcoin, fiat, rate1, rate2) {
+  const ratio = rate1 / rate2
+
+  if (ratio >= 0.9 && ratio <= 1.1) {
+    return
+  }
+
+  debug('rorschach', {
+    altcoin,
+    fiat,
+    rate1,
+    rate2
   })
+  const message = `${altcoin} error: ${fiat} ${rate1} vs. ${rate2}`
+  throw new Error(message)
+}
+
+function backfillWithObjects (base, keys) {
+  keys.forEach((currency) => {
+    if (!base[currency]) {
+      base[currency] = {}
+    }
+  })
+}
+
+function normalize (rates) {
+  const context = this
+  const {
+    tickers,
+    config
+  } = context
+  const {
+    allcoins,
+    altcoins,
+    globalFiats
+  } = config
+
+  backfillWithObjects(rates, allcoins)
 
   _.keys(rates).forEach((src) => {
-    if (config.altcoins.indexOf(src) === -1) {
+    if (altcoins.indexOf(src) === -1) {
       return
     }
 
@@ -856,100 +623,60 @@ function normalize(rates, config, runtime) {
         return
       }
 
-      _.keys(rates[src]).forEach((rate) => {
-        if (rates[src][dst]) {
-          return
-        }
-
-        if (rates[dst][src]) {
-          rates[src][dst] = 1.0 / rates[dst][src]
-          return
-        }
-
-        if ((!tickers[rate]) || (!tickers[rate][dst]) || (!rates[src]) || (!rates[src][rate])) {
-          return
-        }
-
-        rates[src][dst] = tickers[rate][dst] * rates[src][rate]
-        rates[dst][src] = 1.0 / rates[src][dst]
+      _.keys(rates[src]).forEach((currency) => {
+        context.setAcrossRates(currency, src, dst)
       })
     })
   })
 
-  config.allcoins.forEach((src) => {
-    config.allcoins.forEach((dst) => {
-      if ((src === dst) || (rates[src][dst])) {
+  allcoins.forEach((src) => {
+    allcoins.forEach((dst) => {
+      if (src === dst || context.rate(src, dst)) {
         return
       }
 
       _.keys(tickers).forEach((currency) => {
-        if (rates[src][dst]) {
-          return
-        }
-
-        if (rates[dst][src]) {
-          rates[src][dst] = 1.0 / rates[dst][src]
-          return
-        }
-
-        if ((!tickers[currency]) || (!tickers[currency][dst]) || (!rates[src]) || (!rates[src][currency])) {
-          return
-        }
-
-        rates[src][dst] = tickers[currency][dst] * rates[src][currency]
-        rates[dst][src] = 1.0 / rates[src][dst]
+        context.setAcrossRates(currency, src, dst)
       })
     })
   })
-  rates = singleton.currencyToNumber(rates)
-  return _.omit(rates, fiats)
+  return _.omit(rates, globalFiats)
 }
 
-function fiatP(currency) {
-  const entry = currencyCodes.code(currency)
-
-  return Array.isArray(entry && entry.countries)
-}
-
-// satoshis, wei, etc.
-function alt2scale(altcurrency) {
-  const scale = decimals[altcurrency]
-
-  if (scale) {
-    return '1e' + scale
+function setAcrossRates (currency, src, dst) {
+  const context = this
+  if (context.rate(src, dst)) {
+    return
   }
+
+  const inverted = context.rate(dst, src)
+  if (inverted) {
+    context.rate(src, dst, inverse(inverted))
+    return
+  }
+
+  const ticker = context.ticker(currency, dst)
+  const rate = context.rate(src, currency)
+  if (!ticker || !rate) {
+    return
+  }
+
+  const value = ticker * rate
+  context.rate(src, dst, value)
 }
 
-function alt2fiat(altcurrency, probi, currency, floatP) {
-  const singleton = this
-  const entry = currencyCodes.code(currency)
-  const rate = singleton.rates[altcurrency] && singleton.rates[altcurrency][currency]
-  const scale = alt2scale(altcurrency)
-  let amount
-
-  if (!rate) return
-
-  if (!(probi instanceof BigNumber)) probi = new BigNumber(probi.toString())
-  amount = probi.times(new BigNumber(rate.toString()))
-  if (floatP) return amount
-
-  if (scale) amount = amount.dividedBy(scale)
-
-  return amount.toFixed(entry ? entry.digits : 2)
+function alt2scale () {
+  return number.alt.scale(...arguments)
 }
 
-function fiat2alt(currency, amount, altcurrency) {
-  const singleton = this
-  const rate = singleton.rates[altcurrency] && singleton.rates[altcurrency][currency]
-  const scale = alt2scale(altcurrency)
-  let probi
+function alt2fiat (altcurrency, probi, currency, float) {
+  const context = this
+  const rate = context.rate(altcurrency, currency)
+  return number.alt.fiat(context.BigNumber, altcurrency, probi, currency, float, rate)
+}
 
-  if ((!amount) || (!rate)) return
-
-  if (!(amount instanceof BigNumber)) amount = new BigNumber(amount.toString())
-  probi = amount.dividedBy(new BigNumber(rate.toString()))
-
-  if (scale) probi = probi.times(scale)
-
-  return probi.floor().toString()
+function fiat2alt (currency, amount, altcurrency) {
+  const context = this
+  const rate = context.rate(altcurrency, currency)
+  return number.fiat.alt(context.BigNumber, currency, amount, altcurrency, rate)
 }
