@@ -1,17 +1,17 @@
 const WebSocket = require('faye-websocket')
 const oxr = require('oxr')
 const _ = require('underscore')
-const globalAltcoinConfig = require('./altcoins')
-const time = require('./time')
-const schemas = require('./schemas')
-const binance = require('./binance')
-const debug = require('./debug')
+const globalAltcoinConfig = require('../altcoins')
+const time = require('../time')
+const schemas = require('../schemas')
+const binance = require('../binance')
+const debug = require('../debug')
 const {
   keys: cacheKeys
-} = require('./cache')
+} = require('../cache')
 const {
   addBaselineSymbols
-} = require('./utils')
+} = require('../utils')
 
 module.exports = [
   monitor1,
@@ -37,27 +37,22 @@ async function monitor1a (symbols, retry, context) {
   const tradeSchema = schemas.binance
   let finished = false
   return new Promise((resolve, reject) => {
-    binance.prices(symbols, function (error, prices) {
-      if (error) {
-        reject(error)
-        return
-      }
-      context.flatline = false
-      symbols.forEach((symbol) => {
-        const price = prices[symbol]
-        update(symbol, price)
-      })
-      respond(symbols, resolve)
-    })
     binance.websockets.trades(symbols, (trade) => {
       const error = context.captureValidation('trade', trade, tradeSchema)
       if (error) {
-        reject(error)
         return
       }
-
-      context.flatline = false
       update(trade.s, trade.p)
+      respond(symbols, resolve)
+    })
+    binance.prices(symbols, (error, prices) => {
+      if (error) {
+        context.captureException(error)
+        return
+      }
+      symbols.forEach((symbol) => {
+        update(symbol, prices[symbol])
+      })
       respond(symbols, resolve)
     })
   })
@@ -66,6 +61,7 @@ async function monitor1a (symbols, retry, context) {
     if (finished) {
       return
     }
+    // console.log(symbols)
     if (!_.find(symbols, (symbol) => {
       const split = context.splitSymbol(symbol)
       return !context.altrate(...split)
@@ -131,17 +127,9 @@ function monitor2 (context) {
     cache.set(`fiats:${altcoin}`, eligible)
   })
 
-  // debug('monitor2', { symbols })
-
   gdax = new WebSocket.Client(urls.gdax)
   context.gdax = gdax
 
-  // gdax.on('open', (event) => {
-  //   debug('monitor2', {
-  //     event: 'connected',
-  //     connected: true
-  //   })
-  // })
   gdax.on('close', (event) => {
     if (event.code !== 1000) {
       let eventValues = _.pick(event, [
@@ -216,7 +204,7 @@ function monitor2 (context) {
     gdax = null
     setTimeout(() => {
       monitor2(context)
-    }, 15 * time.second)
+    }, 15 * time.SECOND)
   }
 }
 
@@ -231,7 +219,7 @@ function monitor3 (context) {
   let cacheTTL = parseInt(configOXR.cacheTTL, 10)
 
   if (isNaN(cacheTTL) || (cacheTTL < 1)) {
-    cacheTTL = 7 * 24 * 1000 * 3600
+    cacheTTL = time.WEEK
   }
 
   const factory = oxr.factory({

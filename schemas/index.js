@@ -1,5 +1,5 @@
 const Joi = require('joi')
-const regexp = require('./regexp')
+const regexp = require('../regexp')
 
 const emptyObject = Joi.object().keys({})
 const positiveNumber = Joi.number().positive()

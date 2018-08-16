@@ -1,5 +1,5 @@
 const currencyCodes = require('currency-codes')
-const decimals = require('./decimals')
+const decimals = require('../decimals')
 
 module.exports = {
   alt: {

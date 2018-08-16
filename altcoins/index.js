@@ -1,8 +1,8 @@
 const _ = require('underscore')
 const {
   keys: cacheKeys
-} = require('./cache')
-const time = require('./time')
+} = require('../cache')
+const time = require('../time')
 
 const globalAltcoinConfig = {
   _internal: {
@@ -92,7 +92,7 @@ async function internalFn (altcoin, tickers, context) {
       return
     }
 
-    const warnings = now + (15 * time.minute)
+    const warnings = now + (15 * time.MINUTE)
     context.warnings = warnings
   })
 }

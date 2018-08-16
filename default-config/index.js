@@ -3,7 +3,7 @@ const {
   CURRENCY_RATES_URL,
   CURRENCY_RATES_TOKEN,
   CURRENCY_OXR_API_ID
-} = require('./env')
+} = require('../env')
 
 module.exports = {
   globalFiats: ['USD', 'EUR'],

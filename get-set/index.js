@@ -4,7 +4,7 @@ const {
 const {
   inverse,
   toNumber
-} = require('./utils')
+} = require('../utils')
 module.exports = deepGetSet
 deepGetSet.accessor = deepAccessor
 

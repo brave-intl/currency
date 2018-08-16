@@ -170,10 +170,6 @@ function captureValidation (key, object, schema, message = (msg) => msg) {
   }
 }
 
-// async function teardown () {
-//   //
-// }
-
 async function ready () {
   const context = this
   const {
@@ -189,15 +185,19 @@ async function ready () {
 
   setInterval(() => {
     context.maintain()
-  }, 1 * time.minute)
+  }, 1 * time.MINUTE)
 
-  await Promise.all(_.map(context.monitors, (monitor) => {
+  const monitors = _.map(context.monitors, (monitor) => {
     return monitor(context)
-  }).concat([context.maintain()]))
+  })
+
+  await Promise.all(monitors.concat([context.maintain()]))
 }
 
 function allcoinsHasAny (symbols) {
-  return _.find(symbols, (symbol) => this.allcoinsHas(symbol)) !== undefined
+  return !_.isUndefined(_.find(symbols, (symbol) => {
+    return this.allcoinsHas(symbol)
+  }))
 }
 
 function splitSymbol (symbol) {
@@ -278,7 +278,6 @@ async function maintenance () {
   const context = this
   let tickers
   let {
-    flatline,
     config
   } = context
 
@@ -286,24 +285,13 @@ async function maintenance () {
     return retrieveRatesEndpoint(context)
   }
 
-  if (flatline) {
-    debug('maintenance', {
-      message: 'no trades reported'
-    })
-    context.captureException(new Error('maintenance reports flatline'))
-    if (process.env.NODE_ENV !== 'production') {
-      process.exit(0)
-    }
-
-    await context.dial911()
-  }
-  context.flatline = true
   const { oxr } = context
 
   if (oxr) {
     let fxrates = await context.wraptry(() => oxr.latest())
-    if (fxrates && fxrates.rates) {
-      _.assign(context.fxrates, fxrates)
+    let { base, rates } = fxrates
+    if (base && rates) {
+      context.fxrates = rates
     }
   }
 
@@ -311,7 +299,7 @@ async function maintenance () {
     tickers = await context.inkblot()
   } catch (ex) {
     if (context.warnings <= now) {
-      context.warnings = now + (15 * time.minute)
+      context.warnings = now + (15 * time.MINUTE)
       context.captureException(ex)
     }
   }
@@ -320,7 +308,7 @@ async function maintenance () {
     await context.rorschach(context.altrates, tickers)
   } catch (ex) {
     if (context.warnings <= now) {
-      context.warnings = now + (15 * time.minute)
+      context.warnings = now + (15 * time.MINUTE)
       context.captureException(ex)
     }
   }
@@ -400,7 +388,6 @@ async function dial911 () {
   if (!entries) {
     return
   }
-
   entries.forEach((entry) => {
     const {
       symbol: src,
@@ -528,7 +515,7 @@ async function rorschach (rates_, tickers) {
     globalFiats,
     altcoins
   } = config
-  const rates = context.normalize(rates_, config)
+  const rates = context.normalize(rates_)
 
   globalFiats.forEach((fiat) => {
     altcoins.forEach((altcoin) => {
@@ -557,7 +544,7 @@ async function rorschach (rates_, tickers) {
     }
   })
   if (informed) {
-    context.informs = now + (1 * time.minute)
+    context.informs = now + (1 * time.MINUTE)
   }
 
   context.normalize(context.rates)
