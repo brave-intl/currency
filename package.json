@@ -5,10 +5,10 @@
   "main": "index.js",
   "scripts": {
     "precommit": "npm test",
-    "prepush": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
-    "test": "npm run lint && ava -v *.test.js"
+    "test": "npm run lint && ava -v *.test.js",
+    "share": "npm version patch && git push && npm publish"
   },
   "author": "",
   "license": "ISC",
