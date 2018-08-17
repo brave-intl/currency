@@ -29,6 +29,7 @@ module.exports = Currency
 
 Currency.inverse = inverse
 Currency.config = jsonClone(defaultConfig)
+Currency.BigNumber = ScopedBigNumber
 
 const globl = createGlobal(Currency, Currency.config)
 
