@@ -1,17 +1,19 @@
-import test from 'ava'
+import {
+  serial as test
+} from 'ava'
 import Currency from './'
-import _ from 'underscore'
+import _ from 'lodash'
 
-const BTC = 'BTC'
-const USD = 'USD'
+const BAT = 'BAT'
+const EUR = 'EUR'
+const ZAR = 'ZAR'
+const EOS = 'EOS'
 
 test('exports function', (t) => {
   t.true(_.isFunction(Currency))
 })
 
-const currency = Currency({
-  rates: null
-})
+const currency = Currency()
 
 test('creates a new Currency object even without the new keyword', (t) => {
   t.plan(2)
@@ -20,34 +22,41 @@ test('creates a new Currency object even without the new keyword', (t) => {
 })
 
 test('resolves maintain', async (t) => {
-  const currency = Currency({
-    rates: null,
-    instance: true
-  })
   await currency.ready()
-  const aggregated = currency.aggregated()
+  const aggregated = currency.aggregate()
   t.true(_.isObject(aggregated))
 })
 
-test('has an altrate fn to access and set altrates', (t) => {
-  t.plan(3)
-  const value = 5
-
-  t.is(currency.altrate(BTC, USD), undefined)
-  // munge altrate
-  currency.altrate(BTC, USD, value)
-  t.is(currency.altrate(BTC, USD), value)
-  t.is(currency.altrate(USD, BTC), Currency.inverse(value))
+test('ratio rates', async (t) => {
+  t.plan(4)
+  await currency.ready()
+  const eur = currency.fxrate(EUR)
+  const zar = currency.fxrate(ZAR)
+  const bat = currency.altrate(BAT)
+  const eos = currency.altrate(EOS)
+  const eurBatRatio = bat.dividedBy(eur)
+  const eurZarRatio = zar.dividedBy(eur)
+  const eosBatRatio = bat.dividedBy(eos)
+  const eosZarRatio = zar.dividedBy(eos)
+  t.is(+currency.ratio(EUR, BAT), +eurBatRatio)
+  t.is(+currency.ratio(EUR, ZAR), +eurZarRatio)
+  t.is(+currency.ratio(EOS, BAT), +eosBatRatio)
+  t.is(+currency.ratio(EOS, ZAR), +eosZarRatio)
+  console.log(`
+  from
+  ${EUR}, ${+eur}
+  ${BAT}, ${+bat}
+  ${ZAR}, ${+zar}
+  ${EOS}, ${+eos}
+  convert
+  ${EUR} ${BAT} ${+eurBatRatio}
+  ${EUR} ${ZAR} ${+eurZarRatio}
+  ${EOS} ${BAT} ${+eosBatRatio}
+  ${EOS} ${ZAR} ${+eosZarRatio}
+`)
 })
 
-test('has an rate fn to access and set rates', (t) => {
-  t.plan(3)
-  const value = 10
-  const inverse = Currency.inverse(value)
-
-  t.is(currency.rate(BTC, USD), undefined)
-  // munge rate
-  currency.rate(BTC, USD, value)
-  t.is(currency.rate(BTC, USD), value)
-  t.is(currency.rate(USD, BTC), inverse)
+test('last updated', async (t) => {
+  t.plan(1)
+  t.true(currency.lastUpdated() < _.now())
 })

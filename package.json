@@ -20,11 +20,11 @@
     "dotenv": "^6.0.0",
     "faye-websocket": "^0.11.1",
     "joi": "^13.5.2",
+    "lodash": "^4.17.10",
     "node-binance-api": "^0.8.1",
     "node-cache": "^4.2.0",
     "oxr": "^1.1.0",
     "sdebug": "^0.9.5",
-    "underscore": "^1.9.1",
     "wreck": "^14.0.2"
   },
   "devDependencies": {
