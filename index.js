@@ -1,6 +1,5 @@
 const _ = require('lodash')
 const Joi = require('joi')
-const Promise = require('bluebird')
 const wreck = require('wreck')
 const debug = require('./debug')
 const DefaultCache = require('./cache')
@@ -8,7 +7,6 @@ const cacheKeys = DefaultCache.keys
 const schemas = require('./schemas')
 const time = require('./time')
 const regexp = require('./regexp')
-const globalAltcoinConfig = require('./altcoins')
 const ScopedBigNumber = require('./big-number')
 const promises = require('./promises')
 const createGlobal = require('./create-global')
@@ -24,7 +22,6 @@ const defaultConfig = require('./default-config')
 
 const ALT = 'alts'
 const FIAT = 'fiats'
-const MAINTENANCE = 'maintenance'
 const READY = 'ready'
 
 module.exports = Currency
@@ -59,10 +56,8 @@ Currency.prototype = {
   tickerConvertURL,
   init: promises.break(READY, READY),
   ready: promises.make(READY, ready),
-  maintain: promises.break(MAINTENANCE, MAINTENANCE),
-  maintenance: promises.make(MAINTENANCE, maintenance),
+  update: promises.break(READY, update),
   getRates,
-  altcoinsFind,
   watching,
   fetchPrices,
   lastUpdated,
@@ -191,20 +186,20 @@ function captureValidation (key, object, schema, message = (msg) => msg) {
   }
 }
 
+function update () {
+  return this.init()
+}
+
 async function ready () {
   const context = this
-  const {
-    config
-  } = context
-  const {
-    altcoins
-  } = config
+  const { config } = context
 
-  await Promise.all(altcoins.map((altcoin) => {
-    return globalAltcoinConfig.call(altcoin, 'p', [context])
-  }))
+  if (config.helper) {
+    await retrieveRatesEndpoint(context)
+    return
+  }
 
-  await context.maintain()
+  await this.fetchPrices()
 }
 
 function allcoinsHas (str) {
@@ -243,26 +238,6 @@ async function retrieveRatesEndpoint (context) {
 
     _.extend(target, results[key])
   })
-}
-
-async function maintenance () {
-  const context = this
-  const { config } = context
-
-  if (config.helper) {
-    await retrieveRatesEndpoint(context)
-    return
-  }
-
-  await this.fetchPrices()
-}
-
-function altcoinsFind (keys, tickers) {
-  const context = this
-  return Promise.all(keys.map((altcoin) => {
-    const args = [tickers, context]
-    return globalAltcoinConfig.call(altcoin, 'f', args)
-  }))
 }
 
 async function retrieve (url, props, schema) {
