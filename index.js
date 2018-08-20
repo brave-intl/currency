@@ -10,7 +10,6 @@ const time = require('./time')
 const regexp = require('./regexp')
 const globalAltcoinConfig = require('./altcoins')
 const ScopedBigNumber = require('./big-number')
-// const monitors = require('./monitors')
 const promises = require('./promises')
 const createGlobal = require('./create-global')
 const prices = require('./prices')
@@ -47,7 +46,6 @@ Currency.prototype = {
   constructor: Currency,
   alts: {},
   fiats: {},
-  // monitors,
   time: jsonClone(time),
   fxrate: access(FIAT),
   altrate: access(ALT),
@@ -101,10 +99,7 @@ function Currency (config_ = {}, runtime) {
 
   context.config = config
 
-  // const monitors = this.monitors.concat(config.monitors || [])
-
   _.assign(context, {
-    // monitors,
     promises: {}
   }, instance === true ? scopedObjectSet : instance)
 
@@ -210,10 +205,6 @@ async function ready () {
   await Promise.all(altcoins.map((altcoin) => {
     return globalAltcoinConfig.call(altcoin, 'p', [context])
   }))
-
-  // _.forEach(context.monitors, (monitor) => {
-  //   return monitor(context)
-  // })
 
   await context.maintain()
 }
