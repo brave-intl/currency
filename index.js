@@ -37,11 +37,6 @@ Currency.BigNumber = ScopedBigNumber
 
 const globl = createGlobal(Currency, Currency.config)
 
-const scopedObjectSet = {
-  alts: {},
-  fiats: {}
-}
-
 Currency.prototype = {
   constructor: Currency,
   alts: {},
@@ -101,7 +96,10 @@ function Currency (config_ = {}, runtime) {
 
   _.assign(context, {
     promises: {}
-  }, instance === true ? scopedObjectSet : instance)
+  }, instance === true ? {
+    alts: {},
+    fiats: {}
+  } : instance)
 
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.BigNumber = BigNumber
