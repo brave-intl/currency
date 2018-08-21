@@ -46,7 +46,7 @@ Currency.prototype = {
   captureException,
   captureValidation,
   retrieve,
-  allcoinsHas,
+  // allcoinsHas,
   global: globl,
   wraptry,
   rates,
@@ -202,9 +202,9 @@ async function ready () {
   await this.fetchPrices()
 }
 
-function allcoinsHas (str) {
-  return this.config.allcoins.indexOf(str) !== -1
-}
+// function allcoinsHas (str) {
+//   return this.config.allcoins.indexOf(str) !== -1
+// }
 
 function getRates () {
   const context = this
