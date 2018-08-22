@@ -40,9 +40,9 @@ function prices (config, BigNumber = ScopedBigNumber) {
 
   const instance = oxr.cache(options, factory)
 
-  return (altcoins) => Promise.all([
+  return () => Promise.all([
     instance.latest(),
-    fetchPrices(altcoins)
+    fetchPrices()
   ]).then(results => {
     const [oxr, alts] = results
     const { rates } = oxr
@@ -81,9 +81,9 @@ function bigAlts (BigNumber, baseline, alts) {
   }, {})
 }
 
-function fetchPrices (symbols) {
+function fetchPrices () {
   return new Promise((resolve, reject) => {
-    binance.prices(symbols, (error, prices) => {
+    binance.prices((error, prices) => {
       if (error) {
         return reject(error)
       }

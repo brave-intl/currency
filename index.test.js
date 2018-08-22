@@ -23,8 +23,8 @@ test('creates a new Currency object even without the new keyword', (t) => {
 
 test('resolves maintain', async (t) => {
   await currency.ready()
-  const aggregated = currency.aggregate()
-  t.true(_.isObject(aggregated))
+  const rates = currency.rates()
+  t.true(_.isObject(rates))
 })
 
 test('ratio rates', async (t) => {
@@ -48,6 +48,7 @@ test('ratio rates', async (t) => {
   ${BAT}, ${+bat}
   ${ZAR}, ${+zar}
   ${EOS}, ${+eos}
+
   convert
   ${EUR} ${BAT} ${+eurBatRatio}
   ${EUR} ${ZAR} ${+eurZarRatio}

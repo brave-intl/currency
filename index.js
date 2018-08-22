@@ -2,8 +2,6 @@ const _ = require('lodash')
 const Joi = require('joi')
 const wreck = require('wreck')
 const debug = require('./debug')
-const DefaultCache = require('./cache')
-const cacheKeys = DefaultCache.keys
 const schemas = require('./schemas')
 const time = require('./time')
 const regexp = require('./regexp')
@@ -15,7 +13,7 @@ const splitSymbol = require('./split')
 const {
   jsonClone,
   captureException,
-  addBaselineSymbols,
+  // addBaselineSymbols,
   inverse
 } = require('./utils')
 const defaultConfig = require('./default-config')
@@ -46,12 +44,11 @@ Currency.prototype = {
   captureException,
   captureValidation,
   retrieve,
-  // allcoinsHas,
   global: globl,
   wraptry,
   rates,
-  aggregate,
   ratio,
+  key,
   ratioFromKnown,
   tickerConvertURL,
   init: promises.break(READY, READY),
@@ -59,7 +56,8 @@ Currency.prototype = {
   update: promises.break(READY, update),
   getRates,
   watching,
-  fetchPrices,
+  refreshPrices,
+  updatePrices,
   lastUpdated,
   get: function (key) { return this.state[key] },
   set: function (key, value) { this.state[key] = value }
@@ -71,18 +69,11 @@ function Currency (config_ = {}, runtime) {
     return new Currency(config_, runtime)
   }
 
-  if (config_.static) {
-    return context
-  }
-
   const configClone = jsonClone(Currency.config)
   const config = _.assign(configClone, config_)
 
   let {
-    altcoins,
-    altcurrency,
-    instance,
-    Cache = DefaultCache
+    instance
   } = config
 
   context.state = {}
@@ -90,7 +81,9 @@ function Currency (config_ = {}, runtime) {
   context.config = config
 
   _.assign(context, {
-    promises: {}
+    promises: {},
+    alts: context.alts,
+    fiats: context.fiats
   }, instance === true ? {
     alts: {},
     fiats: {}
@@ -98,18 +91,6 @@ function Currency (config_ = {}, runtime) {
 
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.BigNumber = BigNumber
-
-  context.informs = 0
-  context.warnings = 0
-  context.cache = new Cache()
-
-  if (altcurrency && altcoins.indexOf(altcurrency) === -1) {
-    altcoins = altcoins.concat(altcurrency)
-  }
-  config.altcoins = altcoins
-
-  const allcoins = altcoins.slice(0)
-  config.allcoins = allcoins
 
   context.prices = prices(config.oxr, BigNumber)
   context.ready()
@@ -121,12 +102,13 @@ function access (key) {
   }
 }
 
-async function fetchPrices () {
+async function refreshPrices () {
   const context = this
-  const { config } = context
-  const symbols = config.altcoins.reduce(addBaselineSymbols, [])
-  const results = await context.prices(symbols)
-  const [fiats, alts] = results
+  const prices = await context.prices()
+  context.updatePrices(...prices)
+}
+
+function updatePrices (fiats, alts) {
   _.assign(this.alts, alts)
   _.assign(this.fiats, fiats)
   this.set('lastUpdated', _.now())
@@ -199,12 +181,8 @@ async function ready () {
     return
   }
 
-  await this.fetchPrices()
+  await this.refreshPrices()
 }
-
-// function allcoinsHas (str) {
-//   return this.config.allcoins.indexOf(str) !== -1
-// }
 
 function getRates () {
   const context = this
@@ -243,16 +221,7 @@ async function retrieveRatesEndpoint (context) {
 async function retrieve (url, props, schema) {
   let result
   const context = this
-  const {
-    cache,
-    wreck
-  } = context
-  const urlKey = cacheKeys.url(url)
-
-  result = cache.get(urlKey)
-  if (result) {
-    return result
-  }
+  const { wreck } = context
 
   let { payload } = await wreck.get(url, props || {})
   result = payload.toString()
@@ -269,37 +238,53 @@ async function retrieve (url, props, schema) {
     throw new Error(error)
   }
 
-  cache.set(urlKey, result)
   return result
 }
 
-function aggregate () {
-  return {
-    altcoins: this.altcoins,
-    fxrates: this.fxrates
+function rates (_base = 'USD') {
+  const context = this
+  const fiats = context.fiats
+  const alts = context.alts
+  const base = upper(_base)
+  const baseline = fiats[base] || alts[base]
+  if (!baseline) {
+    return null
   }
+  const part1 = reduction(baseline, fiats)
+  return reduction(baseline, alts, part1)
 }
 
-function rates (base) {
-  const fxrates = this.fxrates
-  const altcoins = this.altcoins
-  if (base === 'USD') {
-    return _.extend({}, fxrates, altcoins)
-  }
-  const ratio = fxrates[base] || altcoins[base]
-  const part1 = reduction(ratio, fxrates)
-  return reduction(ratio, altcoins, part1)
-}
-
-function reduction (baseRatio, iterable, memo = {}) {
+function reduction (baseline, iterable, memo = {}) {
   const keys = _.keys(iterable)
   return _.reduce(keys, (memo, key) => {
-    memo[key] = iterable[key] / baseRatio
+    memo[key] = iterable[key].dividedBy(baseline)
     return memo
   }, memo)
 }
 
-function ratio (unkA, unkB) {
+function key (unknownCurrency) {
+  const context = this
+  if (!_.isString(unknownCurrency)) {
+    return false
+  }
+  const { fiats, alts } = context
+  if (fiats[unknownCurrency] || alts[unknownCurrency]) {
+    return unknownCurrency
+  }
+  const suggestion = upper(unknownCurrency)
+  if (fiats[suggestion] || alts[suggestion]) {
+    return suggestion
+  }
+  return false
+}
+
+function upper (currency) {
+  return currency.toUpperCase()
+}
+
+function ratio (_unkA, _unkB) {
+  const unkA = upper(_unkA)
+  const unkB = upper(_unkB)
   const context = this
   const {
     fiats,
@@ -320,8 +305,10 @@ function ratio (unkA, unkB) {
   }
 }
 
-function ratioFromKnown (baseA, keyA, baseB, keyB) {
+function ratioFromKnown (baseA, _keyA, baseB, _keyB) {
   const context = this
+  const keyA = upper(_keyA)
+  const keyB = upper(_keyB)
   const baseAHash = context[baseA]
   const baseBHash = context[baseB]
   const numA = baseAHash[keyA]
