@@ -63,7 +63,6 @@ function bigOXR (BigNumber, oxr) {
 
 function bigAlts (BigNumber, baseline, alts) {
   const keys = _.keys(alts)
-  const one = new BigNumber(1)
   return _.reduce(keys, (memo, _key) => {
     let key = _key
     const value_ = alts[key]
@@ -76,7 +75,7 @@ function bigAlts (BigNumber, baseline, alts) {
       const altBaseRatio = new BigNumber(altVal)
       value = altBaseRatio.times(value)
     }
-    memo[src] = one.dividedBy(value.dividedBy(baseline))
+    memo[src] = baseline.dividedBy(value)
     return memo
   }, {})
 }

@@ -43,17 +43,17 @@ test('ratio rates', async (t) => {
   t.is(+currency.ratio(EOS, BAT), +eosBatRatio)
   t.is(+currency.ratio(EOS, ZAR), +eosZarRatio)
   console.log(`
-  from
-  ${EUR}, ${+eur}
-  ${BAT}, ${+bat}
-  ${ZAR}, ${+zar}
-  ${EOS}, ${+eos}
+  from USD
+  ${EUR} ${+eur}
+  ${BAT} ${+bat}
+  ${ZAR} ${+zar}
+  ${EOS} ${+eos}
 
   convert
-  ${EUR} ${BAT} ${+eurBatRatio}
-  ${EUR} ${ZAR} ${+eurZarRatio}
-  ${EOS} ${BAT} ${+eosBatRatio}
-  ${EOS} ${ZAR} ${+eosZarRatio}
+  with 1 ${EUR} you can buy this many ${BAT}: ${+eurBatRatio}
+  with 1 ${EUR} you can buy this many ${ZAR}: ${+eurZarRatio}
+  with 1 ${EOS} you can buy this many ${BAT}: ${+eosBatRatio}
+  with 1 ${EOS} you can buy this many ${ZAR}: ${+eosZarRatio}
 `)
 })
 
