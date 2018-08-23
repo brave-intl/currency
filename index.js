@@ -24,13 +24,15 @@ const READY = 'ready'
 
 module.exports = Currency
 
+const clonedConfig = jsonClone(defaultConfig)
+const globl = createGlobal(Currency, clonedConfig)
+
 Currency.inverse = inverse
-Currency.config = jsonClone(defaultConfig)
+Currency.config = clonedConfig
+Currency.global = globl
 Currency.time = jsonClone(time)
 
 Currency.BigNumber = ScopedBigNumber
-
-const globl = createGlobal(Currency, Currency.config)
 
 Currency.prototype = {
   constructor: Currency,
