@@ -1,6 +1,4 @@
-import {
-  serial as test
-} from 'ava'
+import test from 'ava'
 import Currency from './'
 import _ from 'lodash'
 
@@ -59,5 +57,43 @@ test('ratio rates', async (t) => {
 
 test('last updated', async (t) => {
   t.plan(1)
+  await currency.ready()
   t.true(currency.lastUpdated() < _.now())
+})
+
+test('usd can be converted into usdt', async (t) => {
+  t.plan(1)
+  await currency.ready()
+  const usdt = currency.alt('USDT')
+  t.is(+currency.ratio('USD', 'USDT'), +usdt)
+})
+
+test('has checks whether the ratio is available', async (t) => {
+  t.plan(2)
+  t.false(currency.has('USDT'))
+  await currency.ready()
+  t.true(currency.has('USDT'))
+})
+
+test('fiat checks whether the ratio is available as a fiat', async (t) => {
+  t.plan(2)
+  t.is(currency.fiat(EUR), null)
+  await currency.ready()
+  t.true(currency.fiat(EUR) > 0)
+})
+test('alt checks whether the ratio is available as an alt', async (t) => {
+  t.plan(2)
+  t.is(currency.alt(BAT), null)
+  await currency.ready()
+  t.true(currency.alt(BAT) > 0)
+})
+test('btc is the same on both fiat and alt', async (t) => {
+  t.plan(1)
+  await currency.ready()
+  t.is(+currency.fiat('BTC'), +currency.alt('BTC'))
+})
+test('alt aliases are listed', async (t) => {
+  t.plan(1)
+  await currency.ready()
+  t.is(+currency.ratio('BCH', 'BCC'), 1)
 })

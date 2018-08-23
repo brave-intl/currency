@@ -52,8 +52,11 @@ function prices (config, BigNumber = ScopedBigNumber) {
     const { rates } = oxr
     const baseline = rates.BTC
     const one = new BigNumber(1)
-    const BinanceUSDUSDT = one.dividedBy(baseline).dividedBy(alts.BTCUSDT)
-    const baselined = bigAlts(BigNumber, BinanceUSDUSDT, alts)
+    const btcusdt = new BigNumber(alts.BTCUSDT)
+    const BinanceUSDUSDT = one.dividedBy(btcusdt.times(baseline))
+    alts.BTCUSDT = btcusdt.times(BinanceUSDUSDT)
+    const baselined = bigAlts(BigNumber, alts)
+    baselined.USDT = BinanceUSDUSDT
     _.forOwn(altAliases, (value, key) => {
       baselined[value] = baselined[key]
     })
@@ -68,8 +71,9 @@ function bigOXR (BigNumber, oxr) {
   })
 }
 
-function bigAlts (BigNumber, baseline, alts) {
+function bigAlts (BigNumber, alts) {
   const keys = _.keys(alts)
+  const one = new BigNumber(1)
   return _.reduce(keys, (memo, _key) => {
     let key = _key
     const value_ = alts[key]
@@ -82,7 +86,7 @@ function bigAlts (BigNumber, baseline, alts) {
       const altBaseRatio = new BigNumber(altVal)
       value = altBaseRatio.times(value)
     }
-    memo[src] = baseline.dividedBy(value)
+    memo[src] = one.dividedBy(value)
     return memo
   }, {})
 }

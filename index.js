@@ -18,8 +18,8 @@ const {
 const defaultConfig = require('./default-config')
 
 const USD = 'USD'
-const ALT = 'alts'
-const FIAT = 'fiats'
+const ALT = 'alt'
+const FIAT = 'fiat'
 const READY = 'ready'
 
 module.exports = Currency
@@ -40,6 +40,8 @@ Currency.prototype = {
   time: jsonClone(time),
   fxrate: access(FIAT),
   altrate: access(ALT),
+  sharedGet,
+  sharedSet,
   debug,
   wreck,
   captureException,
@@ -108,7 +110,7 @@ function shared () {
 
 function access (key) {
   return function (ratio) {
-    return this.shared[key][ratio]
+    return this.sharedGet(key)[ratio]
   }
 }
 
@@ -118,10 +120,13 @@ async function refreshPrices () {
   context.updatePrices(...prices)
 }
 
+function sharedSet (key, object) {
+  this.shared[key] = object
+}
+
 function updatePrices (_fiats, _alts) {
-  const { alts, fiats } = this.shared
-  _.assign(alts, _alts)
-  _.assign(fiats, _fiats)
+  this.sharedSet(ALT, _alts)
+  this.sharedSet(FIAT, _fiats)
   this.set('lastUpdated', _.now())
 }
 
@@ -190,7 +195,7 @@ async function ready () {
   if (config.helper) {
     await retrieveRatesEndpoint(context)
   } else {
-    await this.refreshPrices()
+    await context.refreshPrices()
   }
 }
 
@@ -219,16 +224,13 @@ async function retrieveRatesEndpoint (context) {
   const { BigNumber } = context
 
   _.forOwn(results, (result, key) => {
-    const {
-      [key]: target
-    } = context.shared
+    const target = context.sharedGet(key)
     if (!_.isObject(target)) {
       return
     }
 
-    _.forOwn(result, (value, sub) => {
-      target[sub] = new BigNumber(value)
-    })
+    const values = _.mapValues(result, (value) => new BigNumber(value))
+    this.sharedSet(key, values)
   })
 }
 
@@ -257,7 +259,8 @@ async function retrieve (url, props, schema) {
 
 function rates (_base) {
   const context = this
-  const { fiats, alts } = context.shared
+  const fiat = context.sharedGet(FIAT)
+  const alt = context.sharedGet(ALT)
   const base = context.key(_base || USD)
   if (!base) {
     return null
@@ -266,8 +269,8 @@ function rates (_base) {
   if (!baseline) {
     return null
   }
-  const part1 = reduction(baseline, fiats)
-  return reduction(baseline, alts, part1)
+  const part1 = reduction(baseline, fiat)
+  return reduction(baseline, alt, part1)
 }
 
 function reduction (baseline, iterable, memo = {}) {
@@ -293,18 +296,19 @@ function key (unknownCurrency) {
 }
 
 function deepGet (hash, currency) {
-  const {
-    [hash]: obj
-  } = this.shared
-  return obj[currency]
+  return this.sharedGet(hash)[currency]
+}
+
+function sharedGet (hash) {
+  return this.shared[hash] || {}
 }
 
 function fiat (key) {
-  return this.deepGet(FIAT, key)
+  return this.deepGet(FIAT, key) || null
 }
 
 function alt (key) {
-  return this.deepGet(ALT, key)
+  return this.deepGet(ALT, key) || null
 }
 
 function getUnknown (key) {
@@ -319,10 +323,8 @@ function ratio (_unkA, _unkB) {
   const context = this
   const unkA = context.key(_unkA)
   const unkB = context.key(_unkB)
-  const {
-    fiats,
-    alts
-  } = context.shared
+  const fiats = context.sharedGet(FIAT)
+  const alts = context.sharedGet(ALT)
   if (fiats[unkA]) {
     if (fiats[unkB]) {
       return context.ratioFromConverted(FIAT, unkA, FIAT, unkB)
@@ -340,9 +342,11 @@ function ratio (_unkA, _unkB) {
 
 function ratioFromConverted (baseA, keyA, baseB, keyB) {
   const context = this
-  const { shared } = context
-  const a = shared[baseA][keyA]
-  const b = shared[baseB][keyB]
+  const a = context[baseA](keyA)
+  const b = context[baseB](keyB)
+  if (!a || !b) {
+    return 0
+  }
   return b.dividedBy(a)
 }
 
