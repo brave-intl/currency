@@ -7,6 +7,10 @@ const ScopedBigNumber = require('../big-number')
 
 const altRoot = 'USDT'
 
+const altAliases = {
+  BCC: 'BCH'
+}
+
 module.exports = prices
 
 function prices (config, BigNumber = ScopedBigNumber) {
@@ -50,6 +54,9 @@ function prices (config, BigNumber = ScopedBigNumber) {
     const one = new BigNumber(1)
     const BinanceUSDUSDT = one.dividedBy(baseline).dividedBy(alts.BTCUSDT)
     const baselined = bigAlts(BigNumber, BinanceUSDUSDT, alts)
+    _.forOwn(altAliases, (value, key) => {
+      baselined[value] = baselined[key]
+    })
     const oxred = bigOXR(BigNumber, rates)
     return [oxred, baselined]
   })
