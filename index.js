@@ -342,8 +342,8 @@ function ratio (_unkA, _unkB) {
 
 function ratioFromConverted (baseA, keyA, baseB, keyB) {
   const context = this
-  const a = context.deepGet(baseA, keyA)
-  const b = context.deepGet(baseB, keyB)
+  const a = context[baseA](keyA)
+  const b = context[baseB](keyB)
   if (!a || !b) {
     return 0
   }
