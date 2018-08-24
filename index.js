@@ -2,7 +2,7 @@ const _ = require('lodash')
 const Joi = require('joi')
 const wreck = require('wreck')
 const debug = require('./debug')
-const schemas = require('./schemas')
+// const schemas = require('./schemas')
 const time = require('./time')
 const regexp = require('./regexp')
 const ScopedBigNumber = require('./big-number')
@@ -215,7 +215,7 @@ function getRates () {
     useProxyP: true
   }
 
-  return context.retrieve(url, options, schemas.currency)
+  return context.retrieve(url, options)
 }
 
 async function retrieveRatesEndpoint (context) {

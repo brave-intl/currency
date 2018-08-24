@@ -3,8 +3,7 @@ module.exports = {
   jsonClone,
   captureException,
   inverse,
-  toNumber,
-  addBaselineSymbols
+  toNumber
 }
 
 function jsonClone (object) {
@@ -20,18 +19,7 @@ function captureException (error) {
 }
 
 function inverse (value) {
-  return 1.0 / value
-}
-
-function addBaselineSymbols (symbols, altcoin) {
-  if (altcoin === 'BTC') {
-    symbols.push('BTCUSDT')
-  } else if (altcoin === 'ETH') {
-    symbols.push('ETHUSDT', 'ETHBTC')
-  } else {
-    symbols.push(altcoin.split('-').join('') + 'BTC')
-  }
-  return symbols
+  return 1 / value
 }
 
 function toNumber (value) {
