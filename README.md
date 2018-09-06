@@ -75,8 +75,9 @@ Returns the ratio of the passed alt currency to the base provided by `binance`. 
 ### ratio
 ```js
 ratio(A: String, B: String) -> BigNumber
+ratio(A: String, B: String) -> null
 ```
-Returns the ratio of B over A. An easy way to think about this is how many of, "With `1A`, I can get `xB`s", where x is the result in the form of a `BigNumber` Object.
+Returns the ratio of B over A. An easy way to think about this is how many of, "With `1A`, I can get `xB`s", where x is the result in the form of a `BigNumber` Object. Null is returned if one of the currencies is not
 
 ### has
 ```js
@@ -88,10 +89,11 @@ Checks whether a value exists for the given currency.
 ```js
 lastUpdated() -> Number(Date)
 ```
-A Number representing a Date in ms denotes the last time the currencies were fetched. If zero is returned, then the currencies have not yet finished their first fetching.
+A Number representing a Date in ms denotes the last time the currencies were fetched. If `0` is returned, then the currencies have not yet finished their first fetching.
 
 ### rates
 ```js
 rates(base?: String) -> Object[BigNumber]
+rates(base?: String) -> null
 ```
-All altrates and fiatrates in one object with the values as BigNumber(s).
+All altrates and fiatrates in one object with the values as BigNumber(s). Null is returned if the base, is not found.
