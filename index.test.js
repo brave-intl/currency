@@ -20,18 +20,26 @@ test('creates a new Currency object even without the new keyword', (t) => {
 })
 
 test('resolves maintain', async (t) => {
+  t.plan(1)
   await currency.ready()
   const rates = currency.rates()
   t.true(_.isObject(rates))
 })
 
+test('rates are relative to passed base', async (t) => {
+  t.plan(1)
+  await currency.ready()
+  const rates = currency.rates('USD')
+  t.notDeepEqual(rates, currency.rates('EUR'))
+})
+
 test('ratio rates', async (t) => {
   t.plan(4)
   await currency.ready()
-  const eur = currency.fxrate(EUR)
-  const zar = currency.fxrate(ZAR)
-  const bat = currency.altrate(BAT)
-  const eos = currency.altrate(EOS)
+  const eur = currency.fiat(EUR)
+  const zar = currency.fiat(ZAR)
+  const bat = currency.alt(BAT)
+  const eos = currency.alt(EOS)
   const eurBatRatio = bat.dividedBy(eur)
   const eurZarRatio = zar.dividedBy(eur)
   const eosBatRatio = bat.dividedBy(eos)
@@ -56,16 +64,22 @@ test('ratio rates', async (t) => {
 })
 
 test('last updated', async (t) => {
-  t.plan(1)
+  t.plan(2)
+  t.is(currency.lastUpdated(), 0)
   await currency.ready()
   t.true(currency.lastUpdated() < _.now())
+})
+
+test('base returns the base of the currency', async (t) => {
+  t.plan(1)
+  t.is(currency.base(), 'USD')
 })
 
 test('usd can be converted into usdt', async (t) => {
   t.plan(1)
   await currency.ready()
   const usdt = currency.alt('USDT')
-  t.is(+currency.ratio('USD', 'USDT'), +usdt)
+  t.is(+currency.ratio(currency.base(), 'USDT'), +usdt)
 })
 
 test('has checks whether the ratio is available', async (t) => {

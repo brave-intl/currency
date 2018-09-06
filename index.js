@@ -53,13 +53,13 @@ Currency.prototype = {
   ratio,
   key,
   has,
+  base,
   getUnknown,
   fiat,
   alt,
   deepGet,
   ratioFromKnown,
   ratioFromConverted,
-  tickerConvertURL,
   init: promises.break(READY, READY),
   ready: promises.make(READY, ready),
   update: promises.break(READY, update),
@@ -131,11 +131,7 @@ function updatePrices (_fiats, _alts) {
 }
 
 function lastUpdated () {
-  return this.get('lastUpdated')
-}
-
-function tickerConvertURL (currency) {
-  return `${this.config.urls.coinmarketcap}/?convert=${currency}`
+  return this.get('lastUpdated') || 0
 }
 
 function watching (base, deep) {
@@ -191,8 +187,13 @@ function update () {
 async function ready () {
   const context = this
   const { config } = context
+  const { rates } = config
+  const {
+    url,
+    access_token: token
+  } = rates
 
-  if (config.helper) {
+  if (url && token) {
     await retrieveRatesEndpoint(context)
   } else {
     await context.refreshPrices()
@@ -261,7 +262,7 @@ function rates (_base) {
   const context = this
   const fiat = context.sharedGet(FIAT)
   const alt = context.sharedGet(ALT)
-  const base = context.key(_base || USD)
+  const base = context.key(_base || context.base())
   if (!base) {
     return null
   }
@@ -271,6 +272,10 @@ function rates (_base) {
   }
   const part1 = reduction(baseline, fiat)
   return reduction(baseline, alt, part1)
+}
+
+function base () {
+  return USD
 }
 
 function reduction (baseline, iterable, memo = {}) {
