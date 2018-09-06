@@ -46,6 +46,12 @@ ready() -> promise
 ```
 Returns a promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
 
+### update
+```js
+update() -> promise
+```
+Forcefully refreshes the prices.
+
 ### base
 ```js
 base() -> String
