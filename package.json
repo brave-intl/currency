@@ -1,6 +1,6 @@
 {
   "name": "@brave-intl/currency",
-  "version": "1.0.9",
+  "version": "1.0.12",
   "description": "caches currency trade rates for synchronous access",
   "main": "index.js",
   "scripts": {
@@ -14,18 +14,13 @@
   "license": "ISC",
   "dependencies": {
     "bignumber.js": "^7.2.1",
-    "bluebird": "^3.5.1",
-    "currency": "^4.1.0",
-    "currency-codes": "^1.3.0",
-    "dotenv": "^6.0.0",
-    "faye-websocket": "^0.11.1",
-    "joi": "^13.5.2",
-    "lodash": "^4.17.10",
-    "node-binance-api": "^0.8.1",
-    "node-cache": "^4.2.0",
+    "dotenv": "^6.1.0",
+    "joi": "^13.7.0",
+    "lodash": "^4.17.11",
+    "node-binance-api": "^0.8.4",
     "oxr": "^1.1.0",
     "sdebug": "^0.9.5",
-    "wreck": "^14.0.2"
+    "wreck": "^14.1.0"
   },
   "devDependencies": {
     "ava": "^0.25.0",
@@ -34,9 +29,6 @@
     "standard": "^11.0.1"
   },
   "standard": {
-    "ignore": [
-      "config.js"
-    ],
     "parser": "babel-eslint"
   }
 }

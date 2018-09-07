@@ -3,7 +3,7 @@ module.exports = {
   make
 }
 
-function breaker (key, method) {
+function breaker (key) {
   return function () {
     const context = this
     const { promises } = context

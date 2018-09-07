@@ -1,7 +1,6 @@
 const _ = require('lodash')
 module.exports = {
   jsonClone,
-  captureException,
   inverse,
   toNumber
 }
@@ -11,11 +10,6 @@ function jsonClone (object) {
     return {}
   }
   return JSON.parse(JSON.stringify(object))
-}
-
-function captureException (error) {
-  console.log(...arguments)
-  return error
 }
 
 function inverse (value) {

@@ -65,9 +65,9 @@ test('ratio rates', async (t) => {
 
 test('last updated', async (t) => {
   t.plan(2)
-  t.is(currency.lastUpdated(), 0)
+  t.is(currency.lastUpdated(), null)
   await currency.ready()
-  t.true(currency.lastUpdated() < _.now())
+  t.true(new Date(currency.lastUpdated()) < _.now())
 })
 
 test('base returns the base of the currency', async (t) => {
