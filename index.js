@@ -57,6 +57,7 @@ Currency.prototype = {
   refreshPrices,
   lastUpdated,
   save,
+  load: () => {},
   get: function (key) { return _.get(this.state, key, null) },
   set: function (key, value) { _.set(this.state, key, value) }
 }
@@ -84,7 +85,6 @@ function Currency (config_ = {}, runtime) {
   context.BigNumber = BigNumber
 
   context.prices = prices(config.oxr, BigNumber)
-  context.ready()
 }
 
 function defaultState () {
@@ -146,6 +146,7 @@ async function ready () {
     access_token: token
   } = rates
 
+  await context.load()
   if (url && token) {
     await retrieveRatesEndpoint(context)
   } else {
