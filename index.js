@@ -50,12 +50,12 @@ Currency.prototype = {
   alt,
   ratioFromKnown,
   ratioFromConverted,
-  ready: promises.make(READY, ready),
-  update: promises.break(READY),
   getRates,
   watching,
   refreshPrices,
   lastUpdated,
+  ready: promises.maker(READY, getPromises, ready),
+  update: promises.breaker(READY, getPromises),
   save,
   load: () => {},
   get: function (key) { return _.get(this.state, key, null) },
@@ -72,7 +72,7 @@ function Currency (config_ = {}, runtime) {
   const config = _.assign(configClone, config_)
 
   _.assign(context, {
-    promises: {},
+    // promises: {},
     config,
     state: defaultState()
   })
@@ -85,10 +85,15 @@ function Currency (config_ = {}, runtime) {
 
 function defaultState () {
   return {
+    promises: {},
     [ALT]: {},
     [FIAT]: {},
     [LAST_UPDATED]: null
   }
+}
+
+function getPromises (context) {
+  return context.state.promises
 }
 
 async function refreshPrices () {

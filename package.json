@@ -1,6 +1,6 @@
 {
   "name": "@brave-intl/currency",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "caches currency trade rates for synchronous access",
   "main": "index.js",
   "scripts": {

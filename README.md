@@ -35,7 +35,10 @@ const globl = Currency.global()
 * oxr - (object)
   * apiID - (string) oxr app id supplied by registering with oxr
   * cacheTTL - (number) in seconds for the values to stall out and be refetched
-* BigNumber - (Constructor) a big-number.js instance that will be used in each ratio computation
+
+## Members
+* prices - (function -> Promise) a function to fetch prices
+* BigNumber - (Constructor -> BigNumber) a bignumber.js instance that will be used in each ratio computation
 
 ## API
 
