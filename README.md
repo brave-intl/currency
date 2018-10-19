@@ -29,7 +29,6 @@ const globl = Currency.global()
 
 ## Options
 
-* instance - (boolean)
 * rates - (object)
   * url - (string) url that points to previous instances of the rates endpoint
   * access_token - (string) the access token needed for the above url
@@ -42,13 +41,13 @@ const globl = Currency.global()
 
 ### ready
 ```js
-ready() -> promise
+ready() -> Promise
 ```
-Returns a promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
+Returns a Promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
 
 ### update
 ```js
-update() -> promise
+update() -> Promise
 ```
 Forcefully refreshes the prices.
 

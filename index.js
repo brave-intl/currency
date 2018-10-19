@@ -71,15 +71,11 @@ function Currency (config_ = {}, runtime) {
   const configClone = jsonClone(Currency.config)
   const config = _.assign(configClone, config_)
 
-  let {
-    instance
-  } = config
-
   _.assign(context, {
     promises: {},
     config,
     state: defaultState()
-  }, instance)
+  })
 
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.BigNumber = BigNumber
