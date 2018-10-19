@@ -87,7 +87,7 @@ Checks whether a value exists for the given currency.
 
 ### lastUpdated
 ```js
-lastUpdated() -> Number(Date)
+lastUpdated() -> Date[ISO]
 ```
 A Number representing a Date in ms denotes the last time the currencies were fetched. If `0` is returned, then the currencies have not yet finished their first fetching.
 
