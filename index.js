@@ -57,22 +57,20 @@ Currency.prototype = {
   ready: promises.maker(READY, getPromises, ready),
   update: promises.breaker(READY, getPromises),
   save,
-  load: () => {},
   get: function (key) { return _.get(this.state, key, null) },
   set: function (key, value) { _.set(this.state, key, value) }
 }
 
-function Currency (config_ = {}, runtime) {
+function Currency (config_ = {}) {
   const context = this
   if (!(context instanceof Currency)) {
-    return new Currency(config_, runtime)
+    return new Currency(config_)
   }
 
   const configClone = jsonClone(Currency.config)
   const config = _.assign(configClone, config_)
 
   _.assign(context, {
-    // promises: {},
     config,
     state: defaultState()
   })
@@ -147,7 +145,6 @@ async function ready () {
     access_token: token
   } = rates
 
-  await context.load()
   if (url && token) {
     await retrieveRatesEndpoint(context)
   } else {
