@@ -61,7 +61,10 @@ function prices (config, BigNumber = ScopedBigNumber) {
       baselined[value] = baselined[key]
     })
     const oxred = bigOXR(BigNumber, rates)
-    return [oxred, baselined]
+    return {
+      fiat: oxred,
+      alt: baselined
+    }
   })
 }
 

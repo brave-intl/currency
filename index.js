@@ -2,7 +2,6 @@ const _ = require('lodash')
 const Joi = require('joi')
 const wreck = require('wreck')
 const debug = require('./debug')
-// const schemas = require('./schemas')
 const time = require('./time')
 const regexp = require('./regexp')
 const ScopedBigNumber = require('./big-number')
@@ -12,12 +11,12 @@ const prices = require('./prices')
 const splitSymbol = require('./split')
 const {
   jsonClone,
-  captureException,
   inverse
 } = require('./utils')
 const defaultConfig = require('./default-config')
 
 const USD = 'USD'
+const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
 const FIAT = 'fiat'
 const READY = 'ready'
@@ -36,19 +35,11 @@ Currency.BigNumber = ScopedBigNumber
 
 Currency.prototype = {
   constructor: Currency,
-  shared: shared(),
   time: jsonClone(time),
-  fxrate: access(FIAT),
-  altrate: access(ALT),
-  sharedGet,
-  sharedSet,
   debug,
   wreck,
-  captureException,
-  captureValidation,
   retrieve,
   global: globl,
-  wraptry,
   rates,
   ratio,
   key,
@@ -57,81 +48,73 @@ Currency.prototype = {
   getUnknown,
   fiat,
   alt,
-  deepGet,
   ratioFromKnown,
   ratioFromConverted,
-  init: promises.break(READY, READY),
-  ready: promises.make(READY, ready),
-  update: promises.break(READY, update),
   getRates,
   watching,
   refreshPrices,
-  updatePrices,
   lastUpdated,
-  get: function (key) { return this.state[key] },
-  set: function (key, value) { this.state[key] = value }
+  ready: promises.maker(READY, getPromises, ready),
+  update: promises.breaker(READY, getPromises),
+  save,
+  get: function (key) { return _.get(this.state, key, null) },
+  set: function (key, value) { _.set(this.state, key, value) }
 }
 
-function Currency (config_ = {}, runtime) {
+function Currency (config_ = {}) {
   const context = this
   if (!(context instanceof Currency)) {
-    return new Currency(config_, runtime)
+    return new Currency(config_)
   }
 
   const configClone = jsonClone(Currency.config)
   const config = _.assign(configClone, config_)
 
-  let {
-    instance
-  } = config
-
   _.assign(context, {
-    promises: {},
-    shared: context.shared,
     config,
-    state: {}
-  }, instance === true ? {
-    shared: shared()
-  } : instance)
+    state: defaultState()
+  })
 
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.BigNumber = BigNumber
 
   context.prices = prices(config.oxr, BigNumber)
-  context.ready()
 }
 
-function shared () {
+function defaultState () {
   return {
-    alts: {},
-    fiats: {}
+    promises: {},
+    [ALT]: {},
+    [FIAT]: {},
+    [LAST_UPDATED]: null
   }
 }
 
-function access (key) {
-  return function (ratio) {
-    return this.sharedGet(key)[ratio]
-  }
+function getPromises (context) {
+  return context.state.promises
 }
 
 async function refreshPrices () {
+  const prices = await this.prices()
+  await this.save(now(), prices)
+}
+
+function save (lastUpdated, {
+  alt,
+  fiat
+}) {
   const context = this
-  const prices = await context.prices()
-  context.updatePrices(...prices)
+  context.set(LAST_UPDATED, lastUpdated)
+  context.set(ALT, alt)
+  context.set(FIAT, fiat)
 }
 
-function sharedSet (key, object) {
-  this.shared[key] = object
-}
-
-function updatePrices (_fiats, _alts) {
-  this.sharedSet(ALT, _alts)
-  this.sharedSet(FIAT, _fiats)
-  this.set('lastUpdated', _.now())
+function now () {
+  return (new Date()).toISOString()
 }
 
 function lastUpdated () {
-  return this.get('lastUpdated') || 0
+  return this.get(LAST_UPDATED)
 }
 
 function watching (base, deep) {
@@ -151,37 +134,6 @@ function watching (base, deep) {
     return result
   }
   return !!this.rate(a, b)
-}
-
-async function wraptry (trier, catcher, finallier) {
-  let result, err
-  try {
-    result = trier && await trier()
-  } catch (e) {
-    err = e
-    this.captureException(err)
-    result = catcher ? await catcher(err) : result
-  } finally {
-    result = finallier ? await finallier(err, result) : result
-  }
-  return result
-}
-
-function captureValidation (key, object, schema, message = (msg) => msg) {
-  const context = this
-  const { error } = Joi.validate(object, schema)
-
-  if (error) {
-    return context.captureException(message(error), {
-      extra: {
-        [key]: object
-      }
-    })
-  }
-}
-
-function update () {
-  return this.init()
 }
 
 async function ready () {
@@ -220,18 +172,17 @@ function getRates () {
 }
 
 async function retrieveRatesEndpoint (context) {
-  const getter = () => context.getRates()
-  const results = await context.wraptry(getter)
+  const results = await context.getRates()
   const { BigNumber } = context
 
   _.forOwn(results, (result, key) => {
-    const target = context.sharedGet(key)
+    const target = context.get(key)
     if (!_.isObject(target)) {
       return
     }
 
     const values = _.mapValues(result, (value) => new BigNumber(value))
-    this.sharedSet(key, values)
+    context.set(key, values)
   })
 }
 
@@ -250,9 +201,8 @@ async function retrieve (url, props, schema) {
   }
 
   result = JSON.parse(result)
-  const error = schema ? context.captureValidation('data', result, schema) : null
-  if (error) {
-    throw new Error(error)
+  if (schema) {
+    Joi.assert(result, schema)
   }
 
   return result
@@ -260,8 +210,8 @@ async function retrieve (url, props, schema) {
 
 function rates (_base) {
   const context = this
-  const fiat = context.sharedGet(FIAT)
-  const alt = context.sharedGet(ALT)
+  const fiat = context.get(FIAT)
+  const alt = context.get(ALT)
   const base = context.key(_base || context.base())
   if (!base) {
     return null
@@ -300,20 +250,12 @@ function key (unknownCurrency) {
   return false
 }
 
-function deepGet (hash, currency) {
-  return this.sharedGet(hash)[currency]
-}
-
-function sharedGet (hash) {
-  return this.shared[hash] || {}
-}
-
 function fiat (key) {
-  return this.deepGet(FIAT, key) || null
+  return this.get([FIAT, key])
 }
 
 function alt (key) {
-  return this.deepGet(ALT, key) || null
+  return this.get([ALT, key])
 }
 
 function getUnknown (key) {
@@ -328,8 +270,8 @@ function ratio (_unkA, _unkB) {
   const context = this
   const unkA = context.key(_unkA)
   const unkB = context.key(_unkB)
-  const fiats = context.sharedGet(FIAT)
-  const alts = context.sharedGet(ALT)
+  const fiats = context.get(FIAT)
+  const alts = context.get(ALT)
   if (fiats[unkA]) {
     if (fiats[unkB]) {
       return context.ratioFromConverted(FIAT, unkA, FIAT, unkB)

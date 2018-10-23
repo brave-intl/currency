@@ -1,21 +1,19 @@
 module.exports = {
-  break: breaker,
-  make
+  breaker,
+  maker
 }
 
-function breaker (key, method) {
+function breaker (key, getPromises) {
   return function () {
-    const context = this
-    const { promises } = context
+    const promises = getPromises(this)
     delete promises[key]
     return this[key](...arguments)
   }
 }
 
-function make (key, fn) {
+function maker (key, getPromises, fn) {
   return function () {
-    const context = this
-    const { promises } = context
-    return (promises[key] = (promises[key] || fn.apply(context, arguments)))
+    const promises = getPromises(this)
+    return (promises[key] = (promises[key] || fn.apply(this, arguments)))
   }
 }

@@ -29,26 +29,28 @@ const globl = Currency.global()
 
 ## Options
 
-* instance - (boolean)
 * rates - (object)
   * url - (string) url that points to previous instances of the rates endpoint
   * access_token - (string) the access token needed for the above url
 * oxr - (object)
   * apiID - (string) oxr app id supplied by registering with oxr
   * cacheTTL - (number) in seconds for the values to stall out and be refetched
-* BigNumber - (Constructor) a big-number.js instance that will be used in each ratio computation
+
+## Members
+* prices - (function -> Promise) a function to fetch prices
+* BigNumber - (Constructor -> BigNumber) a bignumber.js instance that will be used in each ratio computation
 
 ## API
 
 ### ready
 ```js
-ready() -> promise
+ready() -> Promise
 ```
-Returns a promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
+Returns a Promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
 
 ### update
 ```js
-update() -> promise
+update() -> Promise
 ```
 Forcefully refreshes the prices.
 
@@ -87,7 +89,7 @@ Checks whether a value exists for the given currency.
 
 ### lastUpdated
 ```js
-lastUpdated() -> Number(Date)
+lastUpdated() -> Date[ISO]
 ```
 A Number representing a Date in ms denotes the last time the currencies were fetched. If `0` is returned, then the currencies have not yet finished their first fetching.
 
