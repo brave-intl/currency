@@ -1,6 +1,7 @@
 import test from 'ava'
 import Currency from './'
 import _ from 'lodash'
+import debug from './debug'
 
 const BAT = 'BAT'
 const EUR = 'EUR'
@@ -48,7 +49,7 @@ test('ratio rates', async (t) => {
   t.is(+currency.ratio(EUR, ZAR), +eurZarRatio)
   t.is(+currency.ratio(EOS, BAT), +eosBatRatio)
   t.is(+currency.ratio(EOS, ZAR), +eosZarRatio)
-  console.log(`
+  debug(`
   from USD
   ${EUR} ${+eur}
   ${BAT} ${+bat}

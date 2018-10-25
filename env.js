@@ -1,6 +1,6 @@
-
 const dotenv = require('dotenv')
 dotenv.config()
+
 const {
   CURRENCY_RATES_TOKEN,
   CURRENCY_RATES_URL,
