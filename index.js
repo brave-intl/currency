@@ -58,7 +58,10 @@ Currency.prototype = {
   update: promises.breaker(READY, getPromises),
   save,
   get: function (key) { return _.get(this.state, key, null) },
-  set: function (key, value) { _.set(this.state, key, value) }
+  set: function (key, value) { _.set(this.state, key, value) },
+  reset: function () {
+    this.state = defaultState()
+  }
 }
 
 function Currency (config_ = {}) {
@@ -69,15 +72,11 @@ function Currency (config_ = {}) {
 
   const configClone = jsonClone(Currency.config)
   const config = _.assign(configClone, config_)
-
-  _.assign(context, {
-    config,
-    state: defaultState()
-  })
-
   const BigNumber = config.BigNumber || ScopedBigNumber
+  context.config = config
   context.BigNumber = BigNumber
 
+  context.reset()
   context.prices = prices(config.oxr, BigNumber)
 }
 
