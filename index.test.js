@@ -107,7 +107,7 @@ test('btc is the same on both fiat and alt', async (t) => {
   await currency.ready()
   t.is(+currency.fiat('BTC'), +currency.alt('BTC'))
 })
-test('alt aliases are listed', async (t) => {
+test.skip('alt aliases are listed', async (t) => {
   t.plan(1)
   await currency.ready()
   t.is(+currency.ratio('BCH', 'BCC'), 1)
