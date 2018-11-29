@@ -14,6 +14,8 @@ module.exports = [
   'ADABTC',
   'ZECBTC',
   'XMRBTC',
+  'BTGBTC',
+  'DASHBTC',
   'BCHABCBTC',
   'BCHSVBTC'
 ]
