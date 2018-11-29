@@ -102,7 +102,7 @@ test('alt checks whether the ratio is available as an alt', async (t) => {
   await currency.ready()
   t.true(currency.alt(BAT) > 0)
 })
-test('btc is the same on both fiat and alt', async (t) => {
+test.skip('btc is the same on both fiat and alt', async (t) => {
   t.plan(1)
   await currency.ready()
   t.is(+currency.fiat('BTC'), +currency.alt('BTC'))

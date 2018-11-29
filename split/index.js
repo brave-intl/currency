@@ -7,12 +7,18 @@ const configurations = [{
   BTC: true,
   ETH: true,
   BNB: true,
+  PAX: true,
   length: 3
 }]
 
 function split (symbol) {
   const destination = dest(symbol)
-  const source = symbol.slice(0, symbol.length - destination.length)
+  const symbolLen = symbol && symbol.length
+  const destinationLen = destination && destination.length
+  if (!symbolLen || !destinationLen) {
+    return []
+  }
+  const source = symbol.slice(0, symbolLen - destinationLen)
   return [source, destination]
 }
 

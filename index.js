@@ -128,7 +128,12 @@ function watching (base, deep) {
     if (base.length > 8 || base.length < 6) {
       return result
     }
-    ;([b, a] = splitSymbol(base))
+    const split = splitSymbol(base)
+    if (!split.length) {
+      return result
+    }
+    b = split[0]
+    a = split[1]
   } else {
     return result
   }
