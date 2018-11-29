@@ -1,0 +1,19 @@
+module.exports = [
+  'PAXUSDT',
+  'PAXBTC',
+  'BTCPAX',
+  'USDCBTC',
+  'ETHBTC',
+  'LTCBTC',
+  'QTUMBTC',
+  'EOSBTC',
+  'ZRXBTC',
+  'BATBTC',
+  'XRPBTC',
+  'XLMBTC',
+  'ADABTC',
+  'ZECBTC',
+  'XMRBTC',
+  'BCHABCBTC',
+  'BCHSVBTC'
+]
