@@ -82,7 +82,7 @@ test('usd can be converted into usdt', async (t) => {
   const usdt = currency.alt('USDT')
   const base = currency.base()
   debug(`BASE: ${base}`)
-  debug(`USDT: ${usdt}`)
+  debug(_.mapValues(currency.state.alt, (value) => value.toString()))
   t.is(+currency.ratio(base, 'USDT'), +usdt)
 })
 
