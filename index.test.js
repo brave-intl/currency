@@ -80,7 +80,10 @@ test('usd can be converted into usdt', async (t) => {
   t.plan(1)
   await currency.ready()
   const usdt = currency.alt('USDT')
-  t.is(+currency.ratio(currency.base(), 'USDT'), +usdt)
+  const base = currency.base()
+  debug(`BASE: ${base}`)
+  debug(_.mapValues(currency.state.alt, (value) => value.toString()))
+  t.is(+currency.ratio(base, 'USDT'), +usdt)
 })
 
 test('has checks whether the ratio is available', async (t) => {
@@ -102,7 +105,7 @@ test('alt checks whether the ratio is available as an alt', async (t) => {
   await currency.ready()
   t.true(currency.alt(BAT) > 0)
 })
-test.skip('btc is the same on both fiat and alt', async (t) => {
+test('btc is the same on both fiat and alt', async (t) => {
   t.plan(1)
   await currency.ready()
   t.is(+currency.fiat('BTC'), +currency.alt('BTC'))
