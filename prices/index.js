@@ -1,82 +1,78 @@
 const _ = require('lodash')
-const oxr = require('oxr')
-const time = require('../time')
+const oxrModule = require('oxr')
 const split = require('../split')
-const binance = require('../binance')
+const Binance = require('../binance')
 const ScopedBigNumber = require('../big-number')
 const _wantedPairs = require('./pairs')
 const _altAliases = require('./aliases')
-
 module.exports = prices
 
-function prices (config, BigNumber = ScopedBigNumber) {
-  if (!config) {
+function prices ({
+  oxr: oxrConfig,
+  binance: binanceConfig
+}, beItResolved, BigNumber = ScopedBigNumber) {
+  if (!oxrConfig || !binanceConfig) {
     return Promise.reject
   }
 
-  const wantedPairs = config.pairs || _wantedPairs
-  const altAliases = config.aliases || _altAliases
-  const exchangeRoot = config.root || 'PAX'
-  const altRoot = config.altRoot || 'BTC'
+  const pairs = oxrConfig.pairs || _wantedPairs
+  const altAliases = oxrConfig.aliases || _altAliases
+  const exchangeRoot = oxrConfig.root || 'USDT'
+  const altRoot = oxrConfig.altRoot || 'BTC'
 
-  let cacheTTL = parseInt(config.cacheTTL, 10)
-
-  if (isNaN(cacheTTL) || (cacheTTL < 1)) {
-    cacheTTL = time.WEEK
-  }
-
-  const factory = oxr.factory({
-    appId: config.apiID
-  })
-  const store = {
-    get: function () {
-      return Promise.resolve(this.value)
-    },
-    put: function (value) {
-      this.value = value
-      return Promise.resolve(value)
-    }
-  }
-  const ttl = parseInt(cacheTTL, 10)
-  const options = {
-    store,
-    ttl
-  }
-
-  const instance = oxr.cache(options, factory)
-
-  return () => Promise.all([
-    instance.latest(),
-    fetchPrices(wantedPairs).then((pairs) => {
-      return _.pick(pairs, wantedPairs)
-    })
-  ]).then((results) => {
-    const oxr = results[0]
-    const alts = results[1]
-    const { rates } = oxr
-    const baseline = rates[altRoot]
-    const one = new BigNumber(1)
-    const BASEROOT = `${altRoot}${exchangeRoot}`
-    const basestable = new BigNumber(alts[BASEROOT])
-    const BinanceUSDSTABLE = one.dividedBy(basestable.times(baseline))
-    alts[BASEROOT] = basestable.times(BinanceUSDSTABLE)
-    const baselined = bigAlts(exchangeRoot, BigNumber, alts)
-    baselined.USDT = BinanceUSDSTABLE
-    _.forOwn(altAliases, (values, key) => {
-      const val = baselined[key]
-      if (!val) {
-        return
+  const binance = Binance(binanceConfig)
+  let service = null
+  service = oxrModule.factory(oxrConfig)
+  service = oxrModule.cache({
+    method: 'historical',
+    store: {
+      cache: {},
+      get: function (date) {
+        return Promise.resolve(this.cache[date])
+      },
+      put: function (value, date) {
+        this.cache[date] = value
+        return Promise.resolve(this.cache[date])
       }
-      _.forEach(values, (value) => {
-        baselined[value] = val
-      })
-    })
-    const oxred = bigOXR(BigNumber, rates)
-    return {
-      fiat: oxred,
-      alt: baselined
     }
-  })
+  }, service)
+
+  return function (options) {
+    return beItResolved.call(this, {
+      binance,
+      oxr: service,
+      pairs
+    }, options).then(({
+      converted,
+      fiat,
+      alt
+    }) => {
+      let baselined = null
+      if (converted) {
+        baselined = alt
+      } else {
+        baselined = bigAlts(fiat[altRoot], altRoot, exchangeRoot, BigNumber, alt)
+      }
+      _.forOwn(altAliases, (values, key) => {
+        const val = baselined[key]
+        if (!val) {
+          return
+        }
+        _.forEach(values, (value) => {
+          baselined[value] = val
+        })
+      })
+      const oxred = bigOXR(BigNumber, fiat)
+      return {
+        fiat: oxred,
+        alt: baselined
+      }
+    })
+  }
+}
+
+function key (a, b) {
+  return `${a}${b}`
 }
 
 function bigOXR (BigNumber, oxr) {
@@ -85,14 +81,20 @@ function bigOXR (BigNumber, oxr) {
   })
 }
 
-function bigAlts (exchangeRoot, BigNumber, alts) {
+function bigAlts (usd, altRoot, exchangeRoot, BigNumber, alts) {
   const keys = _.keys(alts)
-  const one = new BigNumber(1)
+  const conversionKey = key(altRoot, exchangeRoot)
+  const convertValue = alts[conversionKey]
+  const bigConvert = new BigNumber(convertValue)
+  const bigUSD = new BigNumber(usd)
+  const ratio = bigConvert.times(bigUSD)
   return _.reduce(keys, (memo, _key) => {
     let key = _key
     const value_ = alts[key]
     let value = new BigNumber(value_)
-    const [src, dest] = split(key)
+    const apart = split(key)
+    const src = apart[0]
+    const dest = apart[1]
     if (dest !== exchangeRoot) {
       let key = `${dest}${exchangeRoot}`
       let reverseKey = `${exchangeRoot}${dest}`
@@ -100,18 +102,12 @@ function bigAlts (exchangeRoot, BigNumber, alts) {
       const altBaseRatio = new BigNumber(altVal)
       value = altBaseRatio.times(value)
     }
-    memo[src] = one.dividedBy(value)
+    if (src && src !== altRoot) {
+      memo[src] = ratio.dividedBy(value)
+    }
     return memo
-  }, {})
-}
-
-function fetchPrices () {
-  return new Promise((resolve, reject) => {
-    binance.prices((error, prices) => {
-      if (error) {
-        return reject(error)
-      }
-      resolve(prices)
-    })
+  }, {
+    BTC: bigUSD,
+    USDT: ratio
   })
 }

@@ -2,12 +2,15 @@ module.exports = split
 
 const configurations = [{
   USDT: true,
+  TUSD: true,
+  USDC: true,
   length: 4
 }, {
   BTC: true,
   ETH: true,
   BNB: true,
   PAX: true,
+  XRP: true,
   length: 3
 }]
 

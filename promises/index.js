@@ -5,7 +5,7 @@ module.exports = {
 
 function breaker (key, getPromises) {
   return function () {
-    const promises = getPromises(this)
+    const promises = getPromises(this, ...arguments)
     delete promises[key]
     return this[key](...arguments)
   }
@@ -13,7 +13,7 @@ function breaker (key, getPromises) {
 
 function maker (key, getPromises, fn) {
   return function () {
-    const promises = getPromises(this)
+    const promises = getPromises(this, ...arguments)
     return (promises[key] = (promises[key] || fn.apply(this, arguments)))
   }
 }

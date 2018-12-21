@@ -1,6 +1,7 @@
 module.exports = [
   'PAXUSDT',
   'PAXBTC',
+  'BTCUSDT',
   'BTCPAX',
   'USDCBTC',
   'ETHBTC',

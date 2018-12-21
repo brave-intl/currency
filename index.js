@@ -1,6 +1,9 @@
 const _ = require('lodash')
 const Joi = require('joi')
 const wreck = require('wreck')
+const {
+  getAssetDataForTimeRange
+} = require('coinmetrics')
 const debug = require('./debug')
 const time = require('./time')
 const regexp = require('./regexp')
@@ -15,7 +18,9 @@ const {
 } = require('./utils')
 const defaultConfig = require('./default-config')
 
+const DEFAULT_ALT = 'BAT'
 const USD = 'USD'
+const PRICES = 'PRICES'
 const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
 const FIAT = 'fiat'
@@ -46,14 +51,15 @@ Currency.prototype = {
   has,
   base,
   getUnknown,
-  fiat,
-  alt,
+  fiat: access(FIAT),
+  alt: access(ALT),
   ratioFromKnown,
   ratioFromConverted,
-  getRates,
+  history,
   watching,
   refreshPrices,
   lastUpdated,
+  byDay,
   ready: promises.maker(READY, getPromises, ready),
   update: promises.breaker(READY, getPromises),
   save,
@@ -71,31 +77,109 @@ function Currency (config_ = {}) {
   }
 
   const configClone = jsonClone(Currency.config)
-  const config = _.assign(configClone, config_)
+  const config = _.extend(configClone, config_)
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.config = config
   context.BigNumber = BigNumber
+  config.BigNumber = BigNumber
 
   context.reset()
-  context.prices = prices(config.oxr, BigNumber)
+  context.prices = prices(config, generatePrices, BigNumber)
+}
+
+function generatePrices ({
+  binance,
+  oxr
+}, options) {
+  const { date } = options
+  const altPromise = date ? historical(options, this) : binanceCaller(binance)
+  const oxrPromise = date ? oxr.historical(date) : oxr.latest()
+  return Promise.all([
+    altPromise,
+    oxrPromise.then(({
+      rates
+    }) => rates)
+  ]).then((result) => {
+    const alt = result[0]
+    const fiat = result[1]
+    return {
+      converted: !!date,
+      alt,
+      fiat
+    }
+  })
+}
+
+function historical ({
+  date,
+  base = 'usd',
+  currency = DEFAULT_ALT
+}, {
+  BigNumber
+}) {
+  const currencies = _.split(currency, ',')
+  const one = new BigNumber(1)
+  const d = new Date(date)
+  const num = (d - (d % time.DAY)) / 1000
+  return Promise.all(currencies.map(async (currency) => {
+    const lower = currency.toLowerCase()
+    const upper = currency.toUpperCase()
+    const key = `price(${base})`
+    const {
+      result
+    } = await getAssetDataForTimeRange(lower, key, num, num)
+    if (result.error) {
+      throw result.error
+    }
+    const dateData = result[0]
+    const price = dateData[1]
+    return {
+      [upper]: one.dividedBy(price)
+    }
+  })).then((results) => {
+    return _.assign({}, ...results)
+  })
+}
+
+function binanceCaller (binance) {
+  return new Promise((resolve, reject) => {
+    binance.prices((error, prices) => {
+      if (error) {
+        return reject(error)
+      }
+      resolve(prices)
+    })
+  })
 }
 
 function defaultState () {
   return {
     promises: {},
-    [ALT]: {},
-    [FIAT]: {},
+    [PRICES]: {},
     [LAST_UPDATED]: null
   }
 }
 
-function getPromises (context) {
-  return context.state.promises
+function getPromises (context, date) {
+  const promises = context.get('promises')
+  const key = date ? byDay(date) : date
+  const cache = promises[key] = promises[key] || {}
+  return cache
 }
 
-async function refreshPrices () {
-  const prices = await this.prices()
-  await this.save(now(), prices)
+async function refreshPrices (options) {
+  const { date } = options
+  const prices = await this.prices(options)
+  if (date) {
+    const day = new Date(date)
+    await this.history(day, prices)
+  } else {
+    await this.save(now(), prices)
+  }
+}
+
+function history (lastUpdated, prices) {
+  this.set([PRICES, lastUpdated.toISOString()], prices)
 }
 
 function save (lastUpdated, {
@@ -103,9 +187,12 @@ function save (lastUpdated, {
   fiat
 }) {
   const context = this
+  const day = byDay(lastUpdated)
   context.set(LAST_UPDATED, lastUpdated)
-  context.set(ALT, alt)
-  context.set(FIAT, fiat)
+  context.set([PRICES, day], {
+    alt,
+    fiat
+  })
 }
 
 function now () {
@@ -140,54 +227,8 @@ function watching (base, deep) {
   return !!this.rate(a, b)
 }
 
-async function ready () {
-  const context = this
-  const { config } = context
-  const { rates } = config
-  const {
-    url,
-    access_token: token
-  } = rates
-
-  if (url && token) {
-    await retrieveRatesEndpoint(context)
-  } else {
-    await context.refreshPrices()
-  }
-}
-
-function getRates () {
-  const context = this
-  const { rates } = context.config
-  const {
-    url,
-    access_token: accessToken
-  } = rates
-  const headers = {
-    authorization: `Bearer ${accessToken}`,
-    'content-type': 'application/json'
-  }
-  const options = {
-    headers,
-    useProxyP: true
-  }
-
-  return context.retrieve(url, options)
-}
-
-async function retrieveRatesEndpoint (context) {
-  const results = await context.getRates()
-  const { BigNumber } = context
-
-  _.forOwn(results, (result, key) => {
-    const target = context.get(key)
-    if (!_.isObject(target)) {
-      return
-    }
-
-    const values = _.mapValues(result, (value) => new BigNumber(value))
-    context.set(key, values)
-  })
+async function ready (options = {}) {
+  await this.refreshPrices(options)
 }
 
 async function retrieve (url, props, schema) {
@@ -212,15 +253,26 @@ async function retrieve (url, props, schema) {
   return result
 }
 
-function rates (_base) {
+function byDay (date) {
+  if (!date) {
+    return byDay(new Date())
+  }
+  const day = new Date(date)
+  const iso = day.toISOString()
+  const split = iso.split('T')
+  return split[0]
+}
+
+function rates (passed, _base) {
   const context = this
-  const fiat = context.get(FIAT)
-  const alt = context.get(ALT)
-  const base = context.key(_base || context.base())
+  const date = byDay(passed)
+  const fiat = context.get([PRICES, date, FIAT])
+  const alt = context.get([PRICES, date, ALT])
+  const base = context.key(date, _base || context.base())
   if (!base) {
     return null
   }
-  const baseline = context.getUnknown(base)
+  const baseline = context.getUnknown(date, base)
   if (!baseline) {
     return null
   }
@@ -240,70 +292,69 @@ function reduction (baseline, iterable, memo = {}) {
   }, memo)
 }
 
-function key (unknownCurrency) {
+function key (date, unknownCurrency) {
   const context = this
   if (_.isString(unknownCurrency)) {
-    if (context.has(unknownCurrency)) {
+    if (context.has(date, unknownCurrency)) {
       return unknownCurrency
     }
     const suggestion = unknownCurrency.toUpperCase()
-    if (context.has(suggestion)) {
+    if (context.has(date, suggestion)) {
       return suggestion
     }
   }
   return false
 }
 
-function fiat (key) {
-  return this.get([FIAT, key])
+function access (group) {
+  return function (historical, key) {
+    return this.get([PRICES, byDay(historical), group, key])
+  }
 }
 
-function alt (key) {
-  return this.get([ALT, key])
+function getUnknown (date, key) {
+  return this.fiat(date, key) || this.alt(date, key)
 }
 
-function getUnknown (key) {
-  return this.fiat(key) || this.alt(key)
+function has (date, key) {
+  return !!this.getUnknown(date, key)
 }
 
-function has (key) {
-  return !!this.getUnknown(key)
-}
-
-function ratio (_unkA, _unkB) {
+function ratio (date, _unkA, _unkB) {
   const context = this
-  const unkA = context.key(_unkA)
-  const unkB = context.key(_unkB)
-  const fiats = context.get(FIAT)
-  const alts = context.get(ALT)
+  const day = byDay(date)
+  const unkA = context.key(day, _unkA)
+  const unkB = context.key(day, _unkB)
+  const fiats = context.get([PRICES, day, FIAT])
+  const alts = context.get([PRICES, day, ALT])
   if (fiats[unkA]) {
     if (fiats[unkB]) {
-      return context.ratioFromConverted(FIAT, unkA, FIAT, unkB)
+      return context.ratioFromConverted(day, FIAT, unkA, FIAT, unkB)
     } else if (alts[unkB]) {
-      return context.ratioFromConverted(FIAT, unkA, ALT, unkB)
+      return context.ratioFromConverted(day, FIAT, unkA, ALT, unkB)
     }
   } else if (alts[unkA]) {
     if (alts[unkB]) {
-      return context.ratioFromConverted(ALT, unkA, ALT, unkB)
+      return context.ratioFromConverted(day, ALT, unkA, ALT, unkB)
     } else if (fiats[unkB]) {
-      return context.ratioFromConverted(ALT, unkA, FIAT, unkB)
+      return context.ratioFromConverted(day, ALT, unkA, FIAT, unkB)
     }
   }
 }
 
-function ratioFromConverted (baseA, keyA, baseB, keyB) {
+function ratioFromConverted (date, baseA, keyA, baseB, keyB) {
   const context = this
-  const a = context[baseA](keyA)
-  const b = context[baseB](keyB)
+  const a = context[baseA](date, keyA)
+  const b = context[baseB](date, keyB)
   if (!a || !b) {
     return 0
   }
   return b.dividedBy(a)
 }
 
-function ratioFromKnown (baseA, _keyA, baseB, _keyB) {
+function ratioFromKnown (date, baseA, _keyA, baseB, _keyB) {
   const context = this
-  const keyA = context.key(_keyA)
-  const keyB = context.key(_keyB)
-  return context.ratioFromConverted(baseA, keyA, baseB, keyB)
+  const keyA = context.key(date, _keyA)
+  const keyB = context.key(date, _keyB)
+  return context.ratioFromConverted(date, baseA, keyA, baseB, keyB)
 }
