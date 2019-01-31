@@ -33,8 +33,7 @@ const globl = Currency.global()
   * url - (string) url that points to previous instances of the rates endpoint
   * access_token - (string) the access token needed for the above url
 * oxr - (object)
-  * apiID - (string) oxr app id supplied by registering with oxr
-  * cacheTTL - (number) in seconds for the values to stall out and be refetched
+  * apiId - (string) oxr app id supplied by registering with oxr
 
 ## Members
 * prices - (function -> Promise) a function to fetch prices
@@ -44,13 +43,17 @@ const globl = Currency.global()
 
 ### ready
 ```js
-ready() -> Promise
+ready(options) -> Promise
 ```
 Returns a Promise that resolves when the oxr and binance data have been fetched, or immediately if there are already values.
+- Object? (historical)
+  - date - date to get data for
+  - currency - altcurrency to get historical data for. only used if retrieving date.
+  - base - base currency to check against
 
 ### update
 ```js
-update() -> Promise
+update(options) -> Promise
 ```
 Forcefully refreshes the prices.
 
@@ -83,7 +86,7 @@ Returns the ratio of B over A. An easy way to think about this is how many of, "
 
 ### has
 ```js
-has(currency, String) -> Boolean
+has(currency: String) -> Boolean
 ```
 Checks whether a value exists for the given currency.
 

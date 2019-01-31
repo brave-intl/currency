@@ -2,11 +2,16 @@ import test from 'ava'
 import Currency from './'
 import _ from 'lodash'
 import debug from './debug'
+import path from 'path'
+import fs from 'fs'
 
+const USD = 'USD'
 const BAT = 'BAT'
 const EUR = 'EUR'
 const ZAR = 'ZAR'
-const EOS = 'EOS'
+const ETH = 'ETH'
+const BTC = 'BTC'
+const USDT = 'USDT'
 
 test('exports function', (t) => {
   t.true(_.isFunction(Currency))
@@ -30,8 +35,8 @@ test('resolves maintain', async (t) => {
 test('rates are relative to passed base', async (t) => {
   t.plan(1)
   await currency.ready()
-  const rates = currency.rates('USD')
-  t.notDeepEqual(rates, currency.rates('EUR'))
+  const rates = currency.rates(USD)
+  t.notDeepEqual(rates, currency.rates(EUR))
 })
 
 test('ratio rates', async (t) => {
@@ -40,27 +45,27 @@ test('ratio rates', async (t) => {
   const eur = currency.fiat(EUR)
   const zar = currency.fiat(ZAR)
   const bat = currency.alt(BAT)
-  const eos = currency.alt(EOS)
+  const eth = currency.alt(ETH)
   const eurBatRatio = bat.dividedBy(eur)
   const eurZarRatio = zar.dividedBy(eur)
-  const eosBatRatio = bat.dividedBy(eos)
-  const eosZarRatio = zar.dividedBy(eos)
+  const ethBatRatio = bat.dividedBy(eth)
+  const ethZarRatio = zar.dividedBy(eth)
   t.is(+currency.ratio(EUR, BAT), +eurBatRatio)
   t.is(+currency.ratio(EUR, ZAR), +eurZarRatio)
-  t.is(+currency.ratio(EOS, BAT), +eosBatRatio)
-  t.is(+currency.ratio(EOS, ZAR), +eosZarRatio)
+  t.is(+currency.ratio(ETH, BAT), +ethBatRatio)
+  t.is(+currency.ratio(ETH, ZAR), +ethZarRatio)
   debug(`
   from USD
   ${EUR} ${+eur}
   ${BAT} ${+bat}
   ${ZAR} ${+zar}
-  ${EOS} ${+eos}
+  ${ETH} ${+eth}
 
   convert
   with 1 ${EUR} you can buy this many ${BAT}: ${+eurBatRatio}
   with 1 ${EUR} you can buy this many ${ZAR}: ${+eurZarRatio}
-  with 1 ${EOS} you can buy this many ${BAT}: ${+eosBatRatio}
-  with 1 ${EOS} you can buy this many ${ZAR}: ${+eosZarRatio}
+  with 1 ${ETH} you can buy this many ${BAT}: ${+ethBatRatio}
+  with 1 ${ETH} you can buy this many ${ZAR}: ${+ethZarRatio}
 `)
 })
 
@@ -73,24 +78,23 @@ test('last updated', async (t) => {
 
 test('base returns the base of the currency', async (t) => {
   t.plan(1)
-  t.is(currency.base(), 'USD')
+  t.is(currency.base(), USD)
 })
 
 test('usd can be converted into usdt', async (t) => {
   t.plan(1)
   await currency.ready()
-  const usdt = currency.alt('USDT')
+  const usdt = currency.alt(USDT)
   const base = currency.base()
   debug(`BASE: ${base}`)
-  debug(_.mapValues(currency.state.alt, (value) => value.toString()))
-  t.is(+currency.ratio(base, 'USDT'), +usdt)
+  t.is(+currency.ratio(base, USDT), +usdt)
 })
 
 test('has checks whether the ratio is available', async (t) => {
   t.plan(2)
-  t.false(currency.has('USDT'))
+  t.false(currency.has(USDT))
   await currency.ready()
-  t.true(currency.has('USDT'))
+  t.true(currency.has(USDT))
 })
 
 test('fiat checks whether the ratio is available as a fiat', async (t) => {
@@ -108,10 +112,24 @@ test('alt checks whether the ratio is available as an alt', async (t) => {
 test('btc is the same on both fiat and alt', async (t) => {
   t.plan(1)
   await currency.ready()
-  t.is(+currency.fiat('BTC'), +currency.alt('BTC'))
+  t.is(+currency.fiat(BTC), +currency.alt(BTC))
 })
 test('alt aliases are listed', async (t) => {
   t.plan(1)
   await currency.ready()
   t.is(+currency.ratio('BCH', 'BCC'), 1)
+})
+test('can retrieve date based prices', async (t) => {
+  t.plan(1)
+  await currency.ready()
+  const prices = await currency.prices({
+    date: '2018-12-31'
+  })
+  const jsonPrices = _.mapValues(prices, (prices) => {
+    return _.mapValues(prices, (price) => price.toString())
+  })
+  const resultsJSON = path.join(__dirname, 'test.json')
+  const file = fs.readFileSync(resultsJSON)
+  const json = JSON.parse(file.toString())
+  t.deepEqual(jsonPrices, json)
 })

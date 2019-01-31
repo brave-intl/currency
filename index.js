@@ -1,9 +1,7 @@
 const _ = require('lodash')
-const Joi = require('joi')
 const wreck = require('wreck')
 const debug = require('./debug')
 const time = require('./time')
-const regexp = require('./regexp')
 const ScopedBigNumber = require('./big-number')
 const promises = require('./promises')
 const createGlobal = require('./create-global')
@@ -15,6 +13,8 @@ const {
 } = require('./utils')
 const defaultConfig = require('./default-config')
 
+const PROMISES = 'promises'
+const DEFAULT_ALT = 'BAT'
 const USD = 'USD'
 const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
@@ -38,7 +38,6 @@ Currency.prototype = {
   time: jsonClone(time),
   debug,
   wreck,
-  retrieve,
   global: globl,
   rates,
   ratio,
@@ -46,14 +45,14 @@ Currency.prototype = {
   has,
   base,
   getUnknown,
-  fiat,
-  alt,
+  fiat: access(FIAT),
+  alt: access(ALT),
   ratioFromKnown,
   ratioFromConverted,
-  getRates,
   watching,
   refreshPrices,
   lastUpdated,
+  byDay,
   ready: promises.maker(READY, getPromises, ready),
   update: promises.breaker(READY, getPromises),
   save,
@@ -71,13 +70,115 @@ function Currency (config_ = {}) {
   }
 
   const configClone = jsonClone(Currency.config)
-  const config = _.assign(configClone, config_)
+  const config = _.extend(configClone, config_)
   const BigNumber = config.BigNumber || ScopedBigNumber
   context.config = config
   context.BigNumber = BigNumber
+  config.BigNumber = BigNumber
 
   context.reset()
-  context.prices = prices(config.oxr, BigNumber)
+  context.prices = prices(config, generatePrices, BigNumber)
+}
+
+function generatePrices (context, options) {
+  const currency = this
+  const { date } = options
+  const altPromise = getAlts(currency, context, options)
+  const oxrPromise = getFiats(currency, context, options)
+  return Promise.all([
+    altPromise,
+    oxrPromise
+  ]).then((result) => {
+    const alt = result[0]
+    const fiat = result[1]
+    return {
+      errors: alt.errors.concat(fiat.errors),
+      converted: !!date,
+      alt: alt.prices,
+      fiat: fiat.prices
+    }
+  })
+}
+
+async function getFiats (currency, context, options) {
+  const { date } = options
+  const { oxr } = context
+  const errors = []
+  let prices = {}
+  try {
+    prices = await (date ? oxr.historical(date) : oxr.latest()).then(({
+      rates
+    }) => rates)
+  } catch (ex) {
+    errors.push(ex)
+  }
+  return {
+    prices,
+    errors
+  }
+}
+
+function getAlts (currency, context, options) {
+  const { date } = options
+  const { binance } = context
+  return date ? historical(currency, context, options) : binanceCaller(binance)
+}
+
+function historical (currency, context, {
+  date,
+  base = 'usd',
+  currency: curr = DEFAULT_ALT
+}) {
+  const {
+    BigNumber
+  } = currency
+  const {
+    coinmetrics
+  } = context
+  const currencies = _.split(curr, ',')
+  const one = new BigNumber(1)
+  const d = new Date(date)
+  const num = (d - (d % time.DAY)) / 1000
+  const errors = []
+  return Promise.all(currencies.map(async (curr) => {
+    const lower = curr.toLowerCase()
+    const upper = curr.toUpperCase()
+    const key = `price(${base})`
+    const {
+      result
+    } = await coinmetrics.getAssetDataForTimeRange(lower, key, num, num)
+    const error = result.error
+    if (error) {
+      currency.captureException(error)
+      errors.push(error)
+      return {}
+    }
+    const dateData = result[0]
+    const price = dateData[1]
+    return {
+      [upper]: one.dividedBy(price)
+    }
+  })).then((results) => {
+    return {
+      prices: _.assign({}, ...results),
+      errors
+    }
+  })
+}
+
+function binanceCaller (binance) {
+  return new Promise((resolve, reject) => {
+    binance.prices((error, prices) => {
+      const result = {}
+      if (error) {
+        result.errors = [error]
+      } else {
+        result.prices = prices
+        result.errors = []
+      }
+      resolve(result)
+    })
+  })
 }
 
 function defaultState () {
@@ -90,12 +191,12 @@ function defaultState () {
 }
 
 function getPromises (context) {
-  return context.state.promises
+  return context.get(PROMISES)
 }
 
-async function refreshPrices () {
-  const prices = await this.prices()
-  await this.save(now(), prices)
+async function refreshPrices (options) {
+  const prices = await this.prices(options)
+  this.save(now(), prices)
 }
 
 function save (lastUpdated, {
@@ -140,76 +241,18 @@ function watching (base, deep) {
   return !!this.rate(a, b)
 }
 
-async function ready () {
-  const context = this
-  const { config } = context
-  const { rates } = config
-  const {
-    url,
-    access_token: token
-  } = rates
-
-  if (url && token) {
-    await retrieveRatesEndpoint(context)
-  } else {
-    await context.refreshPrices()
-  }
+async function ready (options = {}) {
+  await this.refreshPrices(options)
 }
 
-function getRates () {
-  const context = this
-  const { rates } = context.config
-  const {
-    url,
-    access_token: accessToken
-  } = rates
-  const headers = {
-    authorization: `Bearer ${accessToken}`,
-    'content-type': 'application/json'
+function byDay (date) {
+  if (!date) {
+    return byDay(new Date())
   }
-  const options = {
-    headers,
-    useProxyP: true
-  }
-
-  return context.retrieve(url, options)
-}
-
-async function retrieveRatesEndpoint (context) {
-  const results = await context.getRates()
-  const { BigNumber } = context
-
-  _.forOwn(results, (result, key) => {
-    const target = context.get(key)
-    if (!_.isObject(target)) {
-      return
-    }
-
-    const values = _.mapValues(result, (value) => new BigNumber(value))
-    context.set(key, values)
-  })
-}
-
-async function retrieve (url, props, schema) {
-  let result
-  const context = this
-  const { wreck } = context
-
-  let { payload } = await wreck.get(url, props || {})
-  result = payload.toString()
-
-  // courtesy of https://stackoverflow.com/questions/822452/strip-html-from-text-javascript#822464
-  if (result.indexOf('<html>') !== -1) {
-    result = result.replace(regexp.html, '')
-    throw new Error(result)
-  }
-
-  result = JSON.parse(result)
-  if (schema) {
-    Joi.assert(result, schema)
-  }
-
-  return result
+  const day = new Date(date)
+  const iso = day.toISOString()
+  const split = iso.split('T')
+  return split[0]
 }
 
 function rates (_base) {
@@ -254,12 +297,10 @@ function key (unknownCurrency) {
   return false
 }
 
-function fiat (key) {
-  return this.get([FIAT, key])
-}
-
-function alt (key) {
-  return this.get([ALT, key])
+function access (group) {
+  return function (key) {
+    return this.get([group, key])
+  }
 }
 
 function getUnknown (key) {
