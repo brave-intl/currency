@@ -1,4 +1,5 @@
 const _ = require('lodash')
+const https = require('https')
 const wreck = require('wreck')
 const debug = require('./debug')
 const time = require('./time')
@@ -119,9 +120,8 @@ async function getFiats (currency, context, options) {
 }
 
 function getAlts (currency, context, options) {
-  const { date } = options
-  const { binance } = context
-  return date ? historical(currency, context, options) : binanceCaller(binance)
+  const fn = options.date ? historical : requestUpholdTickers
+  return fn(currency, context, options)
 }
 
 function historical (currency, context, {
@@ -159,26 +159,64 @@ function historical (currency, context, {
       [upper]: one.dividedBy(price)
     }
   })).then((results) => {
+    const prices = _.assign({}, ...results)
     return {
-      prices: _.assign({}, ...results),
+      prices,
       errors
     }
   })
 }
 
-function binanceCaller (binance) {
+function request (options) {
   return new Promise((resolve, reject) => {
-    binance.prices((error, prices) => {
-      const result = {}
-      if (error) {
-        result.errors = [error]
-      } else {
-        result.prices = prices
-        result.errors = []
-      }
-      resolve(result)
+    const req = https.request(options, (res) => {
+      res.setEncoding('utf8')
+      const chunks = []
+      res.on('data', (chunk) => {
+        chunks.push(chunk)
+      })
+      res.on('end', () => {
+        const string = chunks.join('')
+        const json = JSON.parse(string)
+        resolve(json)
+      })
     })
+    req.on('error', reject)
+    req.end()
   })
+}
+
+async function requestUpholdTickers (currency) {
+  const options = {
+    hostname: 'api.uphold.com',
+    protocol: 'https:',
+    path: '/v0/ticker/USD',
+    method: 'GET'
+  }
+  const alts = ['ETH', 'BAT', 'BCH', 'BTC', 'BTG', 'XAU', 'XRP']
+  try {
+    const json = await request(options)
+    const justUSD = json.reduce((memo, {
+      currency,
+      pair,
+      ask
+    }) => {
+      if (alts.includes(currency)) {
+        const alt = pair.slice(currency.length)
+        memo[alt] = ask
+      }
+      return memo
+    }, {})
+    return {
+      prices: justUSD,
+      errors: []
+    }
+  } catch (e) {
+    return {
+      prices: {},
+      errors: [e]
+    }
+  }
 }
 
 function defaultState () {

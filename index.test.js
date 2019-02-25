@@ -11,7 +11,6 @@ const EUR = 'EUR'
 const ZAR = 'ZAR'
 const ETH = 'ETH'
 const BTC = 'BTC'
-const USDT = 'USDT'
 
 test('exports function', (t) => {
   t.true(_.isFunction(Currency))
@@ -81,20 +80,20 @@ test('base returns the base of the currency', async (t) => {
   t.is(currency.base(), USD)
 })
 
-test('usd can be converted into usdt', async (t) => {
+test('usd can be converted into eur', async (t) => {
   t.plan(1)
   await currency.ready()
-  const usdt = currency.alt(USDT)
+  const eur = currency.fiat(EUR)
   const base = currency.base()
   debug(`BASE: ${base}`)
-  t.is(+currency.ratio(base, USDT), +usdt)
+  t.is(+currency.ratio(base, EUR), +eur)
 })
 
 test('has checks whether the ratio is available', async (t) => {
   t.plan(2)
-  t.false(currency.has(USDT))
+  t.false(currency.has(EUR))
   await currency.ready()
-  t.true(currency.has(USDT))
+  t.true(currency.has(EUR))
 })
 
 test('fiat checks whether the ratio is available as a fiat', async (t) => {
