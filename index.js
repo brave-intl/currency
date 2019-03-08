@@ -200,8 +200,10 @@ async function requestUpholdTickers (currency) {
       pair,
       ask
     }) => {
-      const alt = pair.slice(currency.length)
-      memo[alt] = ask
+      if (currency !== 'USD') {
+        const alt = pair.slice(currency.length)
+        memo[alt] = ask
+      }
       return memo
     }, {})
     return {
