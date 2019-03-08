@@ -139,3 +139,11 @@ test('has rates from uphold', async (t) => {
   t.true(_.isString(XAUString), 'a string is returned')
   t.true(_.isNumber(+XAUString), 'a number is returned')
 })
+
+test('has long rates from uphold', async (t) => {
+  await currency.ready()
+  const DASH = await currency.alt('DASH')
+  const DASHString = DASH.toString()
+  t.true(_.isString(DASHString), 'a string is returned')
+  t.true(_.isNumber(+DASHString), 'a number is returned')
+})
