@@ -206,6 +206,7 @@ async function requestUpholdTickers (currency) {
       }
       return memo
     }, {})
+    delete justUSD.USD
     return {
       prices: justUSD,
       errors: []
