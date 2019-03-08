@@ -1,13 +1,13 @@
 {
   "name": "@brave-intl/currency",
-  "version": "1.2.1",
+  "version": "1.4.3",
   "description": "caches currency trade rates for synchronous access",
   "main": "index.js",
   "scripts": {
     "precommit": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
-    "test": "npm run lint && ava *.test.js"
+    "test": "npm run lint && ava -v *.test.js"
   },
   "author": "",
   "license": "ISC",
@@ -22,7 +22,7 @@
     "wreck": "^14.1.0"
   },
   "devDependencies": {
-    "ava": "^0.25.0",
+    "ava": "^1.2.1",
     "babel-eslint": "^8.2.6",
     "husky": "^0.14.3",
     "standard": "^11.0.1"
