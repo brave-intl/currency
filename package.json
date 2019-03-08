@@ -7,7 +7,7 @@
     "precommit": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
-    "test": "npm run lint && ava *.test.js"
+    "test": "npm run lint && ava -v *.test.js"
   },
   "author": "",
   "license": "ISC",

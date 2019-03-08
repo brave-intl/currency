@@ -132,3 +132,10 @@ test('can retrieve date based prices', async (t) => {
   const json = JSON.parse(file.toString())
   t.deepEqual(jsonPrices, json)
 })
+test('has rates from uphold', async (t) => {
+  await currency.ready()
+  const XAU = await currency.alt('XAU')
+  const XAUString = XAU.toString()
+  t.true(_.isString(XAUString), 'a string is returned')
+  t.true(_.isNumber(+XAUString), 'a number is returned')
+})

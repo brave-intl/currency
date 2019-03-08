@@ -193,7 +193,6 @@ async function requestUpholdTickers (currency) {
     path: '/v0/ticker/USD',
     method: 'GET'
   }
-  const alts = ['ETH', 'BAT', 'BCH', 'BTC', 'BTG', 'XAU', 'XRP']
   try {
     const json = await request(options)
     const justUSD = json.reduce((memo, {
@@ -201,10 +200,8 @@ async function requestUpholdTickers (currency) {
       pair,
       ask
     }) => {
-      if (alts.includes(currency)) {
-        const alt = pair.slice(currency.length)
-        memo[alt] = ask
-      }
+      const alt = pair.slice(currency.length)
+      memo[alt] = ask
       return memo
     }, {})
     return {
