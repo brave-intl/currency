@@ -342,7 +342,7 @@ function access (group) {
 }
 
 function getUnknown (key) {
-  return this.fiat(key) || this.alt(key)
+  return this.alt(key) || this.fiat(key)
 }
 
 function has (key) {
@@ -355,17 +355,17 @@ function ratio (_unkA, _unkB) {
   const unkB = context.key(_unkB)
   const fiats = context.get(FIAT)
   const alts = context.get(ALT)
-  if (fiats[unkA]) {
-    if (fiats[unkB]) {
-      return context.ratioFromConverted(FIAT, unkA, FIAT, unkB)
-    } else if (alts[unkB]) {
-      return context.ratioFromConverted(FIAT, unkA, ALT, unkB)
-    }
-  } else if (alts[unkA]) {
+  if (alts[unkA]) {
     if (alts[unkB]) {
       return context.ratioFromConverted(ALT, unkA, ALT, unkB)
     } else if (fiats[unkB]) {
       return context.ratioFromConverted(ALT, unkA, FIAT, unkB)
+    }
+  } else if (fiats[unkA]) {
+    if (fiats[unkB]) {
+      return context.ratioFromConverted(FIAT, unkA, FIAT, unkB)
+    } else if (alts[unkB]) {
+      return context.ratioFromConverted(FIAT, unkA, ALT, unkB)
     }
   }
 }
