@@ -1,3 +1,3 @@
 module.exports = {
-  BCHABC: ['BCH', 'BCC']
+  BCH: ['BCH', 'BCC']
 }
