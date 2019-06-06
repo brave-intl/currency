@@ -46,6 +46,7 @@ Currency.prototype = {
   has,
   base,
   getUnknown,
+  request,
   fiat: access(FIAT),
   alt: access(ALT),
   ratioFromKnown,
@@ -194,7 +195,7 @@ async function requestUpholdTickers (currency) {
     method: 'GET'
   }
   try {
-    const json = await request(options)
+    const json = await currency.request(options)
     const justUSD = json.reduce((memo, {
       currency,
       pair,
@@ -276,7 +277,7 @@ function watching (base, deep) {
   } else {
     return result
   }
-  return !!this.rate(a, b)
+  return this.ratio(a, b).toString() > 0
 }
 
 async function ready (options = {}) {
@@ -302,9 +303,6 @@ function rates (_base) {
     return null
   }
   const baseline = context.getUnknown(base)
-  if (!baseline) {
-    return null
-  }
   const part1 = reduction(baseline, fiat)
   return reduction(baseline, alt, part1)
 }
@@ -332,7 +330,7 @@ function key (unknownCurrency) {
       return suggestion
     }
   }
-  return false
+  return ''
 }
 
 function access (group) {
@@ -368,6 +366,7 @@ function ratio (_unkA, _unkB) {
       return context.ratioFromConverted(FIAT, unkA, ALT, unkB)
     }
   }
+  return new context.BigNumber(0)
 }
 
 function ratioFromConverted (baseA, keyA, baseB, keyB) {
@@ -375,7 +374,7 @@ function ratioFromConverted (baseA, keyA, baseB, keyB) {
   const a = context[baseA](keyA)
   const b = context[baseB](keyB)
   if (!a || !b) {
-    return 0
+    return new context.BigNumber(0)
   }
   return b.dividedBy(a)
 }

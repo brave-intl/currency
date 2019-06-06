@@ -10,7 +10,7 @@ function prices ({
   oxr: oxrConfig
 }, beItResolved, BigNumber = ScopedBigNumber) {
   if (!oxrConfig) {
-    return Promise.reject
+    return () => Promise.reject(new Error('missing oxr config'))
   }
 
   const pairs = oxrConfig.pairs || _wantedPairs
