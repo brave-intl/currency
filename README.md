@@ -1,11 +1,17 @@
 # @brave-intl/currency
 
-a currency conversion ratio cache
+a currency conversion ratio cache. 
+Atual version is 1.4.6 
 
 ## installation
 
 ```sh
 npm install --save @brave-intl/currency
+```
+## Depenencies 
+```ava": ^1.2.1,
+babel-eslint": ^8.2.6,
+husky": ^0.14.3,
 ```
 
 ## testing
