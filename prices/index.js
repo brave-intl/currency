@@ -3,14 +3,13 @@ const oxrModule = require('oxr')
 const ScopedBigNumber = require('../big-number')
 const _wantedPairs = require('./pairs')
 const _altAliases = require('./aliases')
-const coinmetrics = require('coinmetrics')
 module.exports = prices
 
 function prices ({
   oxr: oxrConfig
 }, beItResolved, BigNumber = ScopedBigNumber) {
   if (!oxrConfig) {
-    return Promise.reject
+    return () => Promise.reject(new Error('missing oxr config'))
   }
 
   const pairs = oxrConfig.pairs || _wantedPairs
@@ -34,7 +33,6 @@ function prices ({
 
   return function (options) {
     return beItResolved.call(this, {
-      coinmetrics,
       oxr: service,
       pairs
     }, options).then(({

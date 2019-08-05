@@ -14,6 +14,6 @@ function breaker (key, getPromises) {
 function maker (key, getPromises, fn) {
   return function () {
     const promises = getPromises(this, ...arguments)
-    return (promises[key] = (promises[key] || fn.apply(this, arguments)))
+    return (promises[key] = promises[key] || Promise.resolve(fn.apply(this, arguments)))
   }
 }
