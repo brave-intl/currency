@@ -18,13 +18,17 @@ const ETH = 'ETH'
 const BTC = 'BTC'
 
 const currency = Currency()
+currency.captureException = _.noop
 
 // must be run first
 test.serial('can retrieve date based prices', async (t) => {
-  currency.request = () => {
+  currency.request = async (e) => {
     throw new Error('errs in request')
   }
   t.deepEqual({}, (await currency.prices({})).alt)
+  t.deepEqual({}, (await currency.prices({
+    date: '2018-12-31'
+  })).alt)
   delete currency.request
 
   const prices = await currency.prices({

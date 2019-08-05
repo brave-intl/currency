@@ -12,11 +12,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hapi/joi": "^15.1.0",
     "bignumber.js": "^7.2.1",
-    "coinmetrics": "0.0.2",
     "debug": "^4.1.0",
     "dotenv": "^6.1.0",
-    "lodash": "^4.17.11",
+    "lodash": "^4.17.15",
     "node-binance-api": "^0.8.4",
     "oxr": "^1.1.0",
     "wreck": "^14.1.0"

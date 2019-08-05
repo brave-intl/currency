@@ -1,8 +1,10 @@
 const _ = require('lodash')
+const Joi = require('@hapi/joi')
 const https = require('https')
 const wreck = require('wreck')
 const debug = require('./debug')
 const time = require('./time')
+const querystring = require('querystring')
 const ScopedBigNumber = require('./big-number')
 const promises = require('./promises')
 const createGlobal = require('./create-global')
@@ -21,6 +23,16 @@ const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
 const FIAT = 'fiat'
 const READY = 'ready'
+
+const metricDataValidator = Joi.object().keys({
+  metricData: Joi.object().keys({
+    metrics: Joi.array().items(Joi.string()),
+    series: Joi.array().items(Joi.object().keys({
+      time: Joi.date().iso(),
+      values: Joi.array().items(Joi.string())
+    }))
+  })
+})
 
 module.exports = Currency
 
@@ -130,41 +142,50 @@ function historical (currency, context, {
   base = 'usd',
   currency: curr = DEFAULT_ALT
 }) {
-  const {
-    BigNumber
-  } = currency
-  const {
-    coinmetrics
-  } = context
   const currencies = _.split(curr, ',')
-  const one = new BigNumber(1)
   const d = new Date(date)
-  const num = (d - (d % time.DAY)) / 1000
+  const start = new Date(d - (d % time.DAY))
   const errors = []
   return Promise.all(currencies.map(async (curr) => {
-    const lower = curr.toLowerCase()
-    const upper = curr.toUpperCase()
-    const key = `price(${base})`
-    const {
-      result
-    } = await coinmetrics.getAssetDataForTimeRange(lower, key, num, num)
-    const error = result.error
-    if (error) {
-      currency.captureException(error)
-      errors.push(error)
-      return {}
-    }
-    const dateData = result[0]
-    const price = dateData[1]
-    return {
-      [upper]: one.dividedBy(price)
-    }
+    return getAssetDataForTimeRange(currency, errors, curr, start.toISOString())
   })).then((results) => {
     const prices = _.assign({}, ...results)
     return {
       prices,
       errors
     }
+  })
+}
+
+async function getAssetDataForTimeRange (currency, errors, ticker, start) {
+  const {
+    BigNumber
+  } = currency
+  const lower = ticker.toLowerCase()
+  const upper = ticker.toUpperCase()
+  const qs = querystring.stringify({
+    time_interval: 'day',
+    metrics: 'PriceUSD',
+    start,
+    end: start
+  })
+  const one = new BigNumber(1)
+  return currency.request({
+    hostname: 'community-api.coinmetrics.io',
+    protocol: 'https:',
+    path: `/v2/assets/${lower}/metricdata?${qs}`,
+    method: 'GET'
+  }).then((json) => {
+    return Joi.validate(json, metricDataValidator)
+  }).then((value) => {
+    const price = value.metricData.series[0].values[0]
+    return {
+      [upper]: one.dividedBy(price)
+    }
+  }).catch((error) => {
+    currency.captureException(error)
+    errors.push(error)
+    return {}
   })
 }
 
