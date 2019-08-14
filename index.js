@@ -70,8 +70,6 @@ Currency.prototype = {
   ready: promises.maker(READY, getPromises, ready),
   update: promises.breaker(READY, getPromises),
   save,
-  requestUpholdTickers,
-  historical,
   get: function (key) { return _.get(this.state, key, null) },
   set: function (key, value) { _.set(this.state, key, value) },
   reset: function () {
@@ -135,17 +133,15 @@ async function getFiats (currency, context, options) {
 }
 
 function getAlts (currency, context, options) {
-  const { historical, requestUpholdTickers } = currency
   const fn = options.date ? historical : requestUpholdTickers
-  return fn.call(currency, context, options)
+  return fn(currency, context, options)
 }
 
-function historical (context, {
+function historical (currency, context, {
   date,
   base = 'usd',
   currency: curr = DEFAULT_ALT
 }) {
-  const currency = this
   const currencies = _.split(curr, ',')
   const d = new Date(date)
   const start = new Date(d - (d % time.DAY))
@@ -220,8 +216,7 @@ function request (options) {
   })
 }
 
-async function requestUpholdTickers () {
-  const currency = this
+async function requestUpholdTickers (currency) {
   const options = {
     hostname: 'api.uphold.com',
     protocol: 'https:',
