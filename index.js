@@ -200,7 +200,15 @@ function request (options) {
       res.on('end', () => {
         const string = chunks.join('')
         const json = JSON.parse(string)
-        resolve(json)
+        const { statusCode } = res
+        if (statusCode < 200 || statusCode >= 400) {
+          reject(Object.assign(new Error(`request failed`), {
+            statusCode,
+            body: json
+          }))
+        } else {
+          resolve(json)
+        }
       })
     })
     req.on('error', reject)

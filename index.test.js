@@ -31,6 +31,13 @@ test.serial('can retrieve date based prices', async (t) => {
   })).alt)
   delete currency.request
 
+  await t.throwsAsync(currency.request({
+    hostname: 'verified-noexist.com',
+    protocol: 'https:',
+    path: '/',
+    method: 'GET'
+  }))
+
   const prices = await currency.prices({
     date: '2018-12-31'
   })
