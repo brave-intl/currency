@@ -4,6 +4,7 @@ const {
 } = require('../env')
 
 module.exports = {
+  maxWait: 3000,
   oxr: {
     appId: CURRENCY_OXR_API_ID
   }

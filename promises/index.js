@@ -3,17 +3,30 @@ module.exports = {
   maker
 }
 
-function breaker (key, getPromises) {
+function breaker (key, getCache) {
   return function () {
-    const promises = getPromises(this, ...arguments)
-    delete promises[key]
+    const cache = getCache(this, ...arguments)
+    cache.del(key)
     return this[key](...arguments)
   }
 }
 
-function maker (key, getPromises, fn) {
+function maker (key, getCache, fn) {
   return function () {
-    const promises = getPromises(this, ...arguments)
-    return (promises[key] = promises[key] || Promise.resolve(fn.apply(this, arguments)))
+    const cache = getCache(this, ...arguments)
+    let value = cache.get(key)
+    if (!value) {
+      value = Promise.resolve(fn.apply(this, arguments))
+      value = value.catch(clear)
+      cache.set(key, value)
+    }
+    return value
+
+    function clear (e) {
+      if (cache.get(key) === value) {
+        cache.del(key)
+      }
+      throw e
+    }
   }
 }

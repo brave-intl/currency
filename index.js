@@ -1,27 +1,30 @@
 const _ = require('lodash')
 const Joi = require('@hapi/joi')
+const Boom = require('@hapi/boom')
 const https = require('https')
 const wreck = require('wreck')
+const querystring = require('querystring')
+const Cache = require('./cache')
 const debug = require('./debug')
 const time = require('./time')
-const querystring = require('querystring')
 const ScopedBigNumber = require('./big-number')
 const promises = require('./promises')
 const createGlobal = require('./create-global')
 const prices = require('./prices')
 const splitSymbol = require('./split')
 const {
+  timeout,
   jsonClone,
   inverse
 } = require('./utils')
 const defaultConfig = require('./default-config')
 
-const PROMISES = 'promises'
 const DEFAULT_ALT = 'BAT'
 const USD = 'USD'
 const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
 const FIAT = 'fiat'
+const ERRORS = 'errors'
 const READY = 'ready'
 
 const metricDataValidator = Joi.object().keys({
@@ -45,6 +48,7 @@ Currency.global = globl
 Currency.time = jsonClone(time)
 
 Currency.BigNumber = ScopedBigNumber
+Currency.Cache = Cache
 
 Currency.prototype = {
   constructor: Currency,
@@ -64,15 +68,17 @@ Currency.prototype = {
   ratioFromKnown,
   ratioFromConverted,
   watching,
-  refreshPrices,
   lastUpdated,
   byDay,
-  ready: promises.maker(READY, getPromises, ready),
-  update: promises.breaker(READY, getPromises),
+  quickTimeout,
+  serviceUnavailable,
+  ready: promises.maker(READY, getCache, ready),
+  update: promises.breaker(READY, getCache),
   save,
   get: function (key) { return _.get(this.state, key, null) },
   set: function (key, value) { _.set(this.state, key, value) },
   reset: function () {
+    this.cache = Currency.Cache()
     this.state = defaultState()
   }
 }
@@ -97,44 +103,69 @@ function Currency (config_ = {}) {
 function generatePrices (context, options) {
   const currency = this
   const { date } = options
-  const altPromise = getAlts(currency, context, options)
-  const oxrPromise = getFiats(currency, context, options)
+  const gettingAlts = getAlts(currency, context, options)
+  const gettingFiats = getFiats(currency, context, options)
+  const altPromise = currency.quickTimeout(ALT, gettingAlts)
+  const oxrPromise = currency.quickTimeout(FIAT, gettingFiats)
   return Promise.all([
     altPromise,
     oxrPromise
-  ]).then((result) => {
-    const alt = result[0]
-    const fiat = result[1]
+  ]).then(([alt, fiat]) => {
     return {
-      errors: alt.errors.concat(fiat.errors),
       converted: !!date,
-      alt: alt.prices,
-      fiat: fiat.prices
+      alt,
+      fiat
     }
   })
+}
+
+function quickTimeout (key, promise) {
+  const { config } = this
+  const { maxWait } = config
+  return Promise.race([
+    promise,
+    timeout(maxWait).then(() => this.serviceUnavailable(key))
+  ])
+}
+
+function serviceUnavailable (key) {
+  return {
+    // use previous prices since we don't merge later
+    prices: this.get(key),
+    errors: [Boom.gatewayTimeout(`${key} service is unavailable`)]
+  }
 }
 
 async function getFiats (currency, context, options) {
   const { date } = options
   const { oxr } = context
-  const errors = []
-  let prices = {}
-  try {
-    prices = await (date ? oxr.historical(date) : oxr.latest()).then(({
-      rates
-    }) => rates)
-  } catch (ex) {
-    errors.push(ex)
-  }
-  return {
-    prices,
-    errors
-  }
+  const method = date ? oxr.historical(date) : oxr.latest()
+  return handleResult(currency, FIAT, method.then(({
+    rates
+  }) => ({
+    prices: rates,
+    errors: []
+  })))
 }
 
 function getAlts (currency, context, options) {
   const fn = options.date ? historical : requestUpholdTickers
-  return fn(currency, context, options)
+  return handleResult(currency, ALT, fn(currency, context, options))
+}
+
+async function handleResult (currency, key, prom) {
+  return prom.then(({
+    prices,
+    errors
+  }) => ({
+    stale: _.isEmpty(prices),
+    prices: prices,
+    errors
+  })).catch((err) => ({
+    stale: true,
+    prices: currency.get(key),
+    errors: [Boom.boomify(err)]
+  }))
 }
 
 function historical (currency, context, {
@@ -146,30 +177,27 @@ function historical (currency, context, {
   const d = new Date(date)
   const start = new Date(d - (d % time.DAY))
   const errors = []
-  return Promise.all(currencies.map(async (curr) => {
+  return Promise.all(currencies.map((curr) => {
     return getAssetDataForTimeRange(currency, errors, curr, start.toISOString())
-  })).then((results) => {
-    const prices = _.assign({}, ...results)
-    return {
-      prices,
-      errors
-    }
-  })
+  })).then((results) => ({
+    prices: _.assign({}, ...results),
+    errors
+  }))
 }
 
-async function getAssetDataForTimeRange (currency, errors, ticker, start) {
+function getAssetDataForTimeRange (currency, errors, ticker, start) {
   const {
     BigNumber
   } = currency
   const lower = ticker.toLowerCase()
   const upper = ticker.toUpperCase()
+  const one = new BigNumber(1)
   const qs = querystring.stringify({
     time_interval: 'day',
     metrics: 'PriceUSD',
     start,
     end: start
   })
-  const one = new BigNumber(1)
   return currency.request({
     hostname: 'community-api.coinmetrics.io',
     protocol: 'https:',
@@ -189,8 +217,21 @@ async function getAssetDataForTimeRange (currency, errors, ticker, start) {
   })
 }
 
-function request (options) {
+async function request (options) {
   return new Promise((resolve, reject) => {
+    const {
+      headers,
+      body: payload
+    } = options
+    const opts = Object.assign({
+      protocol: 'https:',
+      method: 'GET',
+      headers: Object.assign({
+        'Content-Type': 'application/json'
+      }, headers)
+    }, options)
+    const { method } = opts
+    const methodIsGet = method.toLowerCase() === 'get'
     const req = https.request(options, (res) => {
       res.setEncoding('utf8')
       const chunks = []
@@ -198,21 +239,36 @@ function request (options) {
         chunks.push(chunk)
       })
       res.on('end', () => {
-        const string = chunks.join('')
-        const json = JSON.parse(string)
+        const body = chunks.join('')
         const { statusCode } = res
-        if (statusCode < 200 || statusCode >= 400) {
-          reject(Object.assign(new Error('request failed'), {
-            statusCode,
-            body: json
-          }))
-        } else {
-          resolve(json)
+        try {
+          const json = JSON.parse(body)
+          if (statusCode < 200 || statusCode >= 400) {
+            failure(new Error(`request failed`), statusCode, json, body)
+          } else {
+            resolve(json)
+          }
+        } catch (e) {
+          failure(e, statusCode)
         }
       })
     })
-    req.on('error', reject)
+    req.on('error', (e) => failure(e))
+    if (payload && !methodIsGet) {
+      const data = _.isObject(payload) ? JSON.stringify(payload) : payload
+      req.write(data)
+    }
     req.end()
+
+    function failure (err, statusCode, json, body) {
+      reject(Object.assign(err, {
+        statusCode,
+        opts,
+        body,
+        payload,
+        json
+      }))
+    }
   })
 }
 
@@ -254,20 +310,35 @@ async function requestUpholdTickers (currency) {
 
 function defaultState () {
   return {
-    promises: {},
     [ALT]: {},
     [FIAT]: {},
     [LAST_UPDATED]: null
   }
 }
 
-function getPromises (context) {
-  return context.get(PROMISES)
+function getCache (context) {
+  return context.cache
 }
 
-async function refreshPrices (options) {
-  const prices = await this.prices(options)
-  this.save(now(), prices)
+async function ready (options = {}) {
+  const payload = await this.prices(options)
+  const {
+    update,
+    fiat,
+    alt,
+    errors
+  } = payload
+  if (update) {
+    const valid = !errors.length
+    if (valid) {
+      this.save(now(), {
+        fiat,
+        alt
+      })
+    }
+    this.set(ERRORS, errors)
+    return valid
+  }
 }
 
 function save (lastUpdated, {
@@ -310,10 +381,6 @@ function watching (base, deep) {
     return result
   }
   return this.ratio(a, b).toString() > 0
-}
-
-async function ready (options = {}) {
-  await this.refreshPrices(options)
 }
 
 function byDay (date) {

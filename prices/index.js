@@ -1,8 +1,10 @@
 const _ = require('lodash')
 const oxrModule = require('oxr')
+const Boom = require('@hapi/boom')
 const ScopedBigNumber = require('../big-number')
 const _wantedPairs = require('./pairs')
 const _altAliases = require('./aliases')
+const utils = require('../utils')
 module.exports = prices
 
 function prices ({
@@ -37,10 +39,14 @@ function prices ({
       pairs
     }, options).then(({
       converted,
-      fiat: oxred,
+      fiat: fiats,
       alt: alts
     }) => {
-      const alt = converted ? alts : bigAlts(BigNumber, oxred, alts)
+      const errs = [].concat(fiats.errors, alts.errors)
+      const errors = errs.map((err) => Boom.boomify(err))
+      const fiat = utils.mapBigNumber(BigNumber, fiats.prices)
+      const alt = converted ? alts.prices : bigAlts(BigNumber, fiats.prices, alts.prices)
+      // alt data sanitation
       _.forOwn(altAliases, (values, key) => {
         const val = alt[key]
         if (!val) {
@@ -50,8 +56,17 @@ function prices ({
           alt[value] = val
         })
       })
-      const fiat = bigOXR(BigNumber, oxred)
+      const preserve = {
+        BTC: true
+      }
+      _.forOwn(alt, (val, key) => {
+        if (fiat[key] && !preserve[key]) {
+          delete alt[key]
+        }
+      })
       return {
+        update: true,
+        errors,
         fiat,
         alt
       }
@@ -59,16 +74,12 @@ function prices ({
   }
 }
 
-function bigOXR (BigNumber, oxr) {
-  return _.mapValues(oxr, (value) => {
-    return new BigNumber(value)
-  })
-}
-
 function bigAlts (BigNumber, fiat, alts) {
+  const { BTC } = fiat
+  const { BTC: altBTC } = alts
   return _.mapValues(alts, (value) => {
-    const btc = new BigNumber(fiat.BTC)
-    const ratio = btc.dividedBy(alts.BTC)
+    const btc = new BigNumber(BTC || altBTC)
+    const ratio = btc.dividedBy(altBTC || BTC)
     const alt = new BigNumber(value)
     return alt.times(ratio)
   })
