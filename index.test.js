@@ -294,7 +294,7 @@ test('promises', async (t) => {
   let counter = 1
   const key = 'start'
   const clas = {
-    cache: Cache(),
+    cache: {},
     start: promises.maker(key, getCache, begin),
     reset: promises.breaker(key, getCache)
   }

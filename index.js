@@ -4,7 +4,6 @@ const Boom = require('@hapi/boom')
 const https = require('https')
 const wreck = require('wreck')
 const querystring = require('querystring')
-const Cache = require('./cache')
 const debug = require('./debug')
 const time = require('./time')
 const ScopedBigNumber = require('./big-number')
@@ -20,6 +19,7 @@ const {
 const defaultConfig = require('./default-config')
 
 const DEFAULT_ALT = 'BAT'
+const PROMISES = 'promises'
 const USD = 'USD'
 const LAST_UPDATED = 'LAST_UPDATED'
 const ALT = 'alt'
@@ -48,7 +48,6 @@ Currency.global = globl
 Currency.time = jsonClone(time)
 
 Currency.BigNumber = ScopedBigNumber
-Currency.Cache = Cache
 
 Currency.prototype = {
   constructor: Currency,
@@ -72,13 +71,12 @@ Currency.prototype = {
   byDay,
   quickTimeout,
   serviceUnavailable,
-  ready: promises.maker(READY, getCache, ready),
-  update: promises.breaker(READY, getCache),
+  ready: promises.maker(READY, getPromises, ready),
+  update: promises.breaker(READY, getPromises),
   save,
   get: function (key) { return _.get(this.state, key, null) },
   set: function (key, value) { _.set(this.state, key, value) },
   reset: function () {
-    this.cache = Currency.Cache()
     this.state = defaultState()
   }
 }
@@ -310,14 +308,15 @@ async function requestUpholdTickers (currency) {
 
 function defaultState () {
   return {
+    [PROMISES]: {},
     [ALT]: {},
     [FIAT]: {},
     [LAST_UPDATED]: null
   }
 }
 
-function getCache (context) {
-  return context.cache
+function getPromises (context) {
+  return context.get(PROMISES)
 }
 
 async function ready (options = {}) {
@@ -326,10 +325,10 @@ async function ready (options = {}) {
     update,
     fiat,
     alt,
-    errors
+    errors = []
   } = payload
+  const valid = !errors.length
   if (update) {
-    const valid = !errors.length
     if (valid) {
       this.save(now(), {
         fiat,
@@ -337,8 +336,8 @@ async function ready (options = {}) {
       })
     }
     this.set(ERRORS, errors)
-    return valid
   }
+  return update && valid
 }
 
 function save (lastUpdated, {
