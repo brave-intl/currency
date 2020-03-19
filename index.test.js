@@ -1,14 +1,14 @@
-import test from 'ava'
-import prices from './prices'
-import Currency from './'
-import _ from 'lodash'
-import debug from './debug'
-import path from 'path'
-import fs from 'fs'
-import createGlobal from './create-global'
-import split from './split'
-import * as utils from './utils'
-import * as promises from './promises'
+const { serial: test } = require('ava')
+const prices = require('./prices')
+const Currency = require('./')
+const _ = require('lodash')
+const debug = require('./debug')
+const path = require('path')
+const fs = require('fs')
+const createGlobal = require('./create-global')
+const split = require('./split')
+const utils = require('./utils')
+const promises = require('./promises')
 
 const USD = 'USD'
 const BAT = 'BAT'
@@ -20,8 +20,12 @@ const BTC = 'BTC'
 const currency = Currency()
 currency.captureException = _.noop
 
+test.beforeEach(() => {
+  currency.reset()
+})
+
 // must be run first
-test.serial('can retrieve date based prices', async (t) => {
+test('can retrieve date based prices', async (t) => {
   currency.request = async (e) => {
     throw new Error('errs in request')
   }
