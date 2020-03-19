@@ -202,7 +202,7 @@ function request (options) {
         const json = JSON.parse(string)
         const { statusCode } = res
         if (statusCode < 200 || statusCode >= 400) {
-          reject(Object.assign(new Error(`request failed`), {
+          reject(Object.assign(new Error('request failed'), {
             statusCode,
             body: json
           }))
@@ -286,7 +286,7 @@ function lastUpdated () {
 }
 
 function watching (base, deep) {
-  let result = false
+  const result = false
   let a = base
   let b = deep
   if (base && deep) {

@@ -27,9 +27,9 @@ function split (symbol) {
 
 function dest (symbol) {
   const symbolLen = symbol.length
-  for (let config of configurations) {
-    let length = config.length
-    let suffix = symbol.slice(symbolLen - length)
+  for (const config of configurations) {
+    const length = config.length
+    const suffix = symbol.slice(symbolLen - length)
     if (config[suffix]) {
       return suffix
     }
