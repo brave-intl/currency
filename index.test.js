@@ -29,10 +29,10 @@ test('can retrieve date based prices', async (t) => {
   currency.request = async (e) => {
     throw new Error('errs in request')
   }
-  t.deepEqual({}, (await currency.prices({})).alt)
+  t.deepEqual({}, (await currency.prices({})).alt, 'should err')
   t.deepEqual({}, (await currency.prices({
     date: '2018-12-31'
-  })).alt)
+  })).alt, 'should err')
   delete currency.request
 
   await t.throwsAsync(currency.request({
@@ -238,7 +238,9 @@ test('utils.jsonClone', async (t) => {
   t.deepEqual(utils.jsonClone(a1), a1, 'returns a mimicked structure')
   t.not(utils.jsonClone(a1), a1, 'but they are not the same object')
   a1.b = a1
-  t.throws(() => utils.jsonClone(a1), Error, 'a circular object will fail')
+  t.throws(() => utils.jsonClone(a1), {
+    instanceOf: Error
+  }, 'a circular object will fail')
 })
 test('utils.inverse', (t) => {
   t.is(utils.inverse(1), 1)
