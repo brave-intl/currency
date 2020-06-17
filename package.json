@@ -14,18 +14,18 @@
   "dependencies": {
     "@hapi/boom": "^8.0.1",
     "@hapi/joi": "^15.1.1",
+    "ava": "^3.8.2",
     "bignumber.js": "^9.0.0",
     "debug": "^4.1.0",
     "dotenv": "^6.1.0",
     "lodash": "^4.17.15",
     "node-binance-api": "^0.8.4",
-    "oxr": "^1.1.0",
+    "oxr": "^1.1.2",
     "wreck": "^14.1.0"
   },
   "devDependencies": {
-    "ava": "^2.4.0",
     "husky": "^0.14.3",
-    "nyc": "^15.0.0",
-    "standard": "^14.3.3"
+    "nyc": "^15.1.0",
+    "standard": "^14.3.4"
   }
 }
