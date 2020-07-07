@@ -7,6 +7,8 @@
     "precommit": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
+    "security": "npm run lint && npm run moderate-audit",
+    "moderate-audit": "npm audit --audit-level=moderate; echo $?",
     "test": "npm run lint && nyc ava"
   },
   "engines": {
@@ -27,7 +29,7 @@
     "wreck": "^14.1.0"
   },
   "devDependencies": {
-    "ava": "^3.9.0",
+    "ava": "^3.10.1",
     "husky": "^0.14.3",
     "nyc": "^15.1.0",
     "standard": "^14.3.4"
