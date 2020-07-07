@@ -7,7 +7,11 @@
     "precommit": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
-    "test": "npm run lint && nyc ava -v -s *.test.js"
+    "test": "npm run lint && nyc ava"
+  },
+  "engines": {
+    "node": "12.18.1",
+    "npm": "6.14.5"
   },
   "author": "",
   "license": "ISC",
@@ -23,9 +27,17 @@
     "wreck": "^14.1.0"
   },
   "devDependencies": {
-    "ava": "^2.4.0",
+    "ava": "^3.9.0",
     "husky": "^0.14.3",
     "nyc": "^15.1.0",
     "standard": "^14.3.4"
+  },
+  "ava": {
+    "concurrency": 1,
+    "verbose": true,
+    "files": [
+      "*.test.js"
+    ],
+    "timeout": "20s"
   }
 }

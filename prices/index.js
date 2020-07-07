@@ -67,6 +67,7 @@ function prices ({
       return {
         update: true,
         errors,
+        stale: fiats.stale || alts.stale || false,
         fiat,
         alt
       }

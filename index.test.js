@@ -9,6 +9,7 @@ const createGlobal = require('./create-global')
 const split = require('./split')
 const utils = require('./utils')
 const promises = require('./promises')
+const Boom = require('@hapi/boom')
 
 const USD = 'USD'
 const BAT = 'BAT'
@@ -43,10 +44,11 @@ test('can retrieve date based prices', async (t) => {
 
   // default cutoff is 3000
   currency.request = async (e) => utils.timeout(4000)
-  const p3 = await currency.prices({})
   const unavailable = Boom.gatewayTimeout('alt service is unavailable')
+  const p3 = await currency.prices({})
   t.deepEqual({}, p3.alt)
   t.deepEqual([unavailable], p3.errors)
+
   const p4 = await currency.prices({
     date: '2018-12-31'
   })
@@ -55,7 +57,9 @@ test('can retrieve date based prices', async (t) => {
 
   const prev = new currency.BigNumber(Math.random())
   currency.set('alt', { prev })
-  const p5 = await currency.prices({})
+  const p5 = await currency.prices({
+    opt: true
+  })
   t.deepEqual({ prev }, p5.alt)
   t.deepEqual([unavailable], p5.errors)
 
@@ -168,7 +172,8 @@ test('currency.watching', async (t) => {
   await currency.ready()
   t.false(currency.watching('USD', 'UNK'), 'is not watching unknown currency')
   t.false(currency.watching('', 'UNK'), 'is not watching unknown currency')
-  t.false(currency.watching('BATUSD'), 'is not watching unknown currency')
+  t.false(currency.watching('ZRXUSD'), 'is not watching unknown currency')
+  t.true(currency.watching('BATTUSD'), 'is watching known currency')
   t.false(currency.watching('BATUNK'), 'is not watching unknown currency')
   t.false(currency.watching('BATUN'), 'is not watching unknown currency')
   t.false(currency.watching('BATUN', 'UNK'), 'is not watching unknown currency')

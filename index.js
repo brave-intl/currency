@@ -117,7 +117,7 @@ function generatePrices (context, options) {
   })
 }
 
-function quickTimeout (key, promise) {
+function quickTimeout (key, promise, opt) {
   const { config } = this
   const { maxWait } = config
   return Promise.race([
@@ -242,7 +242,7 @@ async function request (options) {
         try {
           const json = JSON.parse(body)
           if (statusCode < 200 || statusCode >= 400) {
-            failure(new Error(`request failed`), statusCode, json, body)
+            failure(new Error('request failed'), statusCode, json, body)
           } else {
             resolve(json)
           }
