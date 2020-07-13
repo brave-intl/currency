@@ -1,7 +1,5 @@
 const BigNumber = require('bignumber.js')
-const ScopedBigNumber = BigNumber.clone()
-ScopedBigNumber.config({
+module.exports = BigNumber.clone({
   EXPONENTIAL_AT: 28,
   DECIMAL_PLACES: 18
 })
-module.exports = ScopedBigNumber

@@ -7,14 +7,19 @@
     "precommit": "npm test",
     "lint": "standard",
     "lint-fix": "npm run lint -- --fix",
-    "test": "npm run lint && nyc ava -v -s *.test.js"
+    "security": "npm run lint && npm run moderate-audit",
+    "moderate-audit": "npm audit --audit-level=moderate; echo $?",
+    "test": "npm run lint && nyc ava"
+  },
+  "engines": {
+    "node": "12.18.1",
+    "npm": "6.14.5"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@hapi/boom": "^8.0.1",
     "@hapi/joi": "^15.1.1",
-    "ava": "^3.8.2",
     "bignumber.js": "^9.0.0",
     "debug": "^4.1.0",
     "dotenv": "^6.1.0",
@@ -24,8 +29,17 @@
     "wreck": "^14.1.0"
   },
   "devDependencies": {
+    "ava": "^3.10.1",
     "husky": "^0.14.3",
     "nyc": "^15.1.0",
     "standard": "^14.3.4"
+  },
+  "ava": {
+    "concurrency": 1,
+    "verbose": true,
+    "files": [
+      "*.test.js"
+    ],
+    "timeout": "20s"
   }
 }
