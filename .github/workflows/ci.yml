@@ -17,7 +17,7 @@ on:
 
 env:
   NODE_ENV: ci
-  DEBUG: *,-babel*,-eslint*
+  DEBUG: "*,-babel*,-eslint*"
   DEBUG_COLORS: true
   CURRENCY_OXR_API_ID: ${{ secrets.CURRENCY_OXR_API_ID }}
 
