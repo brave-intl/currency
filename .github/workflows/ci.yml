@@ -56,4 +56,4 @@ jobs:
           restore-keys: v1-npm-deps-
 
       - name: Test
-        run: npm run docker-test
+        run: npm run test
