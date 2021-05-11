@@ -21,9 +21,10 @@
     "@hapi/boom": "^8.0.1",
     "@hapi/joi": "^15.1.1",
     "bignumber.js": "^9.0.1",
+    "coingecko-api": "^1.0.10",
     "debug": "^4.3.1",
     "dotenv": "^6.1.0",
-    "lodash": "^4.17.20",
+    "lodash": "^4.17.21",
     "node-binance-api": "^0.8.4",
     "oxr": "^1.1.2",
     "wreck": "^14.1.0"
