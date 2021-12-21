@@ -238,12 +238,15 @@ async function request (options) {
       })
       res.on('end', () => {
         const body = chunks.join('')
-        const { statusCode } = res
+        const { statusCode = 0, res: response } = res
         try {
-          const json = JSON.parse(body)
-          if (statusCode < 200 || statusCode >= 400) {
+          if (Number(statusCode) === 429 && response.host.match('coingecko')) {
+            failure(new Error('request failed'), 500, {}, body, { 'Cache-Control': 'no-store' })
+          } else if (statusCode < 200 || statusCode >= 400) {
+            const json = JSON.parse(body)
             failure(new Error('request failed'), statusCode, json, body)
           } else {
+            const json = JSON.parse(body)
             resolve(json)
           }
         } catch (e) {
