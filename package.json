@@ -29,10 +29,10 @@
     "wreck": "^14.1.0"
   },
   "devDependencies": {
-    "ava": "^3.14.0",
+    "ava": "^3.15.0",
     "husky": "^0.14.3",
     "nyc": "^15.1.0",
-    "standard": "^14.3.4"
+    "standard": "^16.0.4"
   },
   "ava": {
     "concurrency": 1,
